@@ -98,6 +98,7 @@ class MemristorQuant(object):
 			self._quantize(true_value, i, c_one)
 			self.intermediate_params[i] = true_value.clone().cpu()
 			self.actual_params[i].data.copy_(true_value)
+		self.rescale()
 		self.quanted = True
 
 	def renoise(self):
@@ -105,11 +106,15 @@ class MemristorQuant(object):
 			self.actual_params[i].data.copy_(self.intermediate_params[i])
 			self.actual_params[i].data += torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
 			self.actual_params[i].data -= torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
+		self.rescale()
+		self.noised = True
+
+	def rescale(self):
+		for i, _ in self.intermediate_params.items():
 			if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
 				self.actual_params[i].data /= self.c[i]
 			else:
 				self.actual_params[i].data.copy_(torch.einsum('ij,i -> ij', self.actual_params[i].data, 1/self.c[i]))
-		self.noised = True
 
 	def unquant(self):
 		if self.quanted:
