@@ -1,0 +1,9 @@
+tensorly
+numpy
+torch
+torchvision
+scipy
+opt_einsum
+
+-e .
+
