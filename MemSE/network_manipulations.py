@@ -68,10 +68,10 @@ def build_sequential_linear(conv):
         LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),  # is padding conv dependent ? i.e. should we grab params ?
         nn.Flatten(),
         linear,
-        LambdaLayer(lambda x: torch.reshape(x, (-1,)+current_output_shape[1:]))
+        LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:]))
     )
     rand_y_repl = seq(rand_x)
-    assert (rand_y == rand_y_repl).all(), 'Linear did not cast to a satisfying solution'
+    assert torch.allclose(rand_y, rand_y_repl, atol=1e-6), 'Linear did not cast to a satisfying solution'
     return seq
 
 def recursive_setattr(obj, name, new):
@@ -127,6 +127,16 @@ def conv_decomposition(model, verbose=False):
         print(model)
         print(count_parameters(model))
     return model
+
+
+def get_intermediates(model, input):
+    hooks = {}
+    def hook_fn(self, input, output):
+        self.__original_output = output.clone().detach().cpu()
+    for name, module in model.named_modules():
+        hooks[name] = module.register_forward_hook(hook_fn)
+    _ = model(input)
+    [h.remove() for h in hooks.values()]
 
 
 def fuse_conv_bn(model):

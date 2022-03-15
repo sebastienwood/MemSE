@@ -1,13 +1,23 @@
+from enum import Enum
 import torch
 import torch.nn as nn
 import numpy as np
 import copy
+from MemSE.definitions import WMAX_MODE
+
+from typing import Union
 
 __all__ = ['MemristorQuant']
 
 
 class MemristorQuant(object):
-	def __init__(self, model: nn.Module, types_handled = [nn.Linear], N: int = 100, wmax_mode='all', Gmax=0.1, std_noise:float=1.) -> None:
+	def __init__(self,
+				 model: nn.Module,
+				 types_handled = [nn.Linear],
+				 N: int = 128,
+				 wmax_mode:Union[str,WMAX_MODE] = WMAX_MODE.ALL,
+				 Gmax=0.1,
+				 std_noise:float=1.) -> None:
 		super().__init__()
 		self.model = model
 		self.saved_params = []
@@ -16,6 +26,8 @@ class MemristorQuant(object):
 		self.Wmax = []
 		self.intermediate_params = {}
 		self.c = {}
+		if isinstance(wmax_mode, str):
+			wmax_mode = WMAX_MODE[wmax_mode.upper()]
 		self.wmax_mode = wmax_mode
 		for m in model.modules():
 			if type(m) in types_handled:
@@ -25,9 +37,10 @@ class MemristorQuant(object):
 		for m in self.saved_params:
 			self.Wmax.append(self._Wmax(m))
 		self.quanted = False
+		self.noised = False
 		self.N = N
 
-		if wmax_mode == 'network':
+		if wmax_mode == WMAX_MODE.ALL:
 			if isinstance(Gmax, float):
 				self.Gmax = np.full((len(self.saved_params)), Gmax)
 			elif isinstance(Gmax, np.ndarray) and Gmax.size == 1:
@@ -36,10 +49,10 @@ class MemristorQuant(object):
 				self.Gmax = np.copy(Gmax)
 			else:
 				raise ValueError('In network mode, expecting either float or ndarray of size 1')
-		elif wmax_mode == 'layer':
+		elif wmax_mode == WMAX_MODE.LAYERWISE:
 			assert isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params)
 			self.Gmax = np.copy(Gmax)
-		elif wmax_mode == 'column':
+		elif wmax_mode == WMAX_MODE.COLUMNWISE:
 			assert isinstance(Gmax, np.ndarray) and Gmax.size == sum(self.n_vars)
 			self.Gmax = np.split(np.copy(Gmax), np.cumsum(self.n_vars))[:-1]
 		else:
@@ -92,10 +105,11 @@ class MemristorQuant(object):
 			self.actual_params[i].data.copy_(self.intermediate_params[i])
 			self.actual_params[i].data += torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
 			self.actual_params[i].data -= torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
-			if self.wmax_mode in ['network', 'layer']:
+			if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
 				self.actual_params[i].data /= self.c[i]
 			else:
 				self.actual_params[i].data.copy_(torch.einsum('ij,i -> ij', self.actual_params[i].data, 1/self.c[i]))
+		self.noised = True
 
 	def unquant(self):
 		if self.quanted:
@@ -108,18 +122,18 @@ class MemristorQuant(object):
 		Wmax = self._Wmax(tensor, layer_idx)
 		if c_one:
 			c = 1.
-			if self.wmax_mode in ['network', 'layer']:
+			if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
 				self.Gmax[layer_idx] = Wmax
 			else:
 				self.Gmax[layer_idx] = self.Wmax[layer_idx] # fill in place
-		Gmax = torch.from_numpy(self.Gmax[layer_idx]).to(tensor) if self.wmax_mode == 'column' else self.Gmax[layer_idx]
+		Gmax = torch.from_numpy(self.Gmax[layer_idx]).to(tensor) if self.wmax_mode == WMAX_MODE.COLUMNWISE else self.Gmax[layer_idx]
 		if not c_one:
 			c = Gmax / Wmax
 		if layer_idx is not None:
 			self.c[layer_idx] = c
 		delta = Gmax / self.N
 
-		if self.wmax_mode in ['network', 'layer']:
+		if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
 			tensor.copy_((torch.floor(tensor * c / delta)) * delta)
 		else:
 			tensor.copy_(torch.einsum('ij,i -> ij', torch.floor(torch.einsum('ij,i -> ij', tensor, (c/delta))), delta))
@@ -127,12 +141,14 @@ class MemristorQuant(object):
 	@torch.no_grad()
 	def _Wmax(self, tensor, layer_idx=None):
 		assert len(tensor.shape) == 2, 'Only works for 2d tensors !'
-		if self.wmax_mode == 'network':
+		if self.wmax_mode == WMAX_MODE.ALL:
 			res = max([torch.max(torch.abs(t)) for t in self.saved_params])
-		elif self.wmax_mode == 'layer':
-			res= torch.max(torch.abs(tensor))
-		elif self.wmax_mode == 'column':
+		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
+			res = torch.max(torch.abs(tensor))
+		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
 			res = torch.max(torch.abs(tensor), dim=1).values
+		else:
+			raise ValueError('Mode is not valid')
 		if layer_idx is not None:
 			self.Wmax[layer_idx] = res
 		return res

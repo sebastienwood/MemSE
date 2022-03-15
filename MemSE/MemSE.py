@@ -5,10 +5,14 @@ import numpy as np
 from tqdm import tqdm
 from prettytable import PrettyTable
 
-from MemSE.mse_functions import *
+from MemSE.MemristorQuant import MemristorQuant
+from MemSE.network_manipulations import get_intermediates
+from MemSE.utils import net_param_iterator
+from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
+from MemSE.nn import mse
 
 class MemSE(nn.Module):
-	def __init__(self, model, quanter, sigma:float, r:float, Gmax_init_Wmax:bool=True, input_bias:bool=True, input_shape=None):
+	def __init__(self, model, quanter, sigma:float=0.1, r:float=1., Gmax_init_Wmax:bool=True, input_bias:bool=True, input_shape=None):
 		super(MemSE, self).__init__()
 		self.model = model
 		self.quanter = quanter
@@ -46,10 +50,39 @@ class MemSE(nn.Module):
 				P_tot += P_tot_i
 				i += 1
 			if isinstance(s,nn.Softplus):
-				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)       
+				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 		return x, gamma, P_tot
+
+	def mse_forward(self, x):
+		self.unquant()
+		get_intermediates(self.model, x)
+		self.quant()
+
+		if self.input_bias:
+			x += self.bias[None, :, :, :]
+
+		gamma_shape = [*x.shape, *x.shape[1:]]
+		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
+		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
+		i = 0
+		mses = []
+		for s in net_param_iterator(self.model):
+			original_output = s.__original_output
+			if isinstance(s,nn.Linear):
+				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape)
+				P_tot += P_tot_i
+				i += 1
+			elif isinstance(s,nn.Softplus):
+				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
+			elif isinstance(s, nn.AvgPool2d):
+				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
+			else: 
+				continue
+			mses.append(mse(original_output, x, gamma if gamma_shape is None else torch.zeros(gamma_shape, device=x)))
+		return x, gamma, P_tot, mses
+
 
 	def quant(self, c_one=True):
 		self.quanter.quant(c_one=c_one)
@@ -69,7 +102,7 @@ def count_parameters(model):
 			continue
 		param = parameter.numel()
 		table.add_row([name, param, parameter.mean().detach().cpu().item()])
-		total_params+=param
+		total_params += param
 	print(table)
 	print(f"Total Trainable Params: {total_params}")
 	return total_params
@@ -82,7 +115,7 @@ def solve_p_mse(model, device, dataloader, Gmax, sigma, r, N, mode, reduce:bool=
 	return p_mean, mse_mean
 
 def opt_p_mse(model, device, dataloader, Gmax, sigma, r, N, mode, nb_epochs:int=5, alpha:float=1., power_constraint:float=0.):
-	quanter = MemristorQuant(model, N = N, wmax_mode=mode, Gmax=Gmax, std_noise = sigma)
+	quanter = MemristorQuant(model, N=N, wmax_mode=mode, Gmax=Gmax, std_noise=sigma)
 	inp_ex, _ = next(iter(dataloader))
 	memse = MemSE(model, quanter, sigma, r, input_shape=inp_ex.shape[1:]).to(device)
 	for param in model.parameters():
@@ -109,7 +142,7 @@ def mse_loop(dataloader, memse:MemSE, device, optimizer=None, alpha:float=1., nb
 		for i, (inp, tar) in enumerate(tepoch):
 			inp, tar = inp.to(device, non_blocking=True), tar.to(device, non_blocking=True)
 			mu, gamma, P_tot = memse(inp) #compute_moments_power_th_batched(model, Gmax, quanter.Wmax, sigma, inp, r)
-			loss = torch.diagonal(gamma, dim1=1, dim2=2)+torch.square(mu-tar)
+			loss = mse(tar, mu, gamma)
 
 			if optimizer is not None:
 				loss_energy = loss.mean(dim=1) * 1e4 + alpha * torch.nn.functional.relu((P_tot - power_constraint).log())
