@@ -102,6 +102,7 @@ class MemristorQuant(object):
 		self.quanted = True
 
 	def renoise(self):
+		assert self.quanted, 'Cannot renoise the original representation'
 		for i, inter in self.intermediate_params.items():
 			self.actual_params[i].data.copy_(self.intermediate_params[i])
 			self.actual_params[i].data += torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)

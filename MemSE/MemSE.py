@@ -6,10 +6,10 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 
 from MemSE.MemristorQuant import MemristorQuant
-from MemSE.network_manipulations import get_intermediates
+from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se
 from MemSE.utils import net_param_iterator
 from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
-from MemSE.nn import mse
+from MemSE.nn import mse_gamma
 
 class MemSE(nn.Module):
 	def __init__(self, model, quanter, sigma:float=0.1, r:float=1., Gmax_init_Wmax:bool=True, input_bias:bool=True, input_shape=None):
@@ -55,21 +55,27 @@ class MemSE(nn.Module):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 		return x, gamma, P_tot
 
-	def mse_forward(self, x):
-		self.unquant()
-		get_intermediates(self.model, x)
-		self.quant()
-
+	def mse_forward(self, x, reps:int = 100):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
+		
+		self.unquant()
+		get_intermediates(self.model, x)
+		self.quant(c_one=False)
+
+		hooks = store_add_intermediates_se(self.model)
+		for _ in range(reps):
+			self.forward_noisy(x)
+		[h.remove() for h in hooks.values()]
+		self.unquant()
+		self.quant() #c_one = True
 
 		gamma_shape = [*x.shape, *x.shape[1:]]
 		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
 		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
 		i = 0
-		mses = []
-		for s in net_param_iterator(self.model):
-			original_output = s.__original_output
+		mses = {'sim': {}, 'us': {}}
+		for idx, s in enumerate(net_param_iterator(self.model)):
 			if isinstance(s,nn.Linear):
 				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape)
 				P_tot += P_tot_i
@@ -78,10 +84,22 @@ class MemSE(nn.Module):
 				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
 			elif isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
-			else: 
+			else:
 				continue
-			mses.append(mse(original_output, x, gamma if gamma_shape is None else torch.zeros(gamma_shape, device=x)))
-		return x, gamma, P_tot, mses
+			if hasattr(s, '__se_output'):
+				mse_output = getattr(s, '__se_output') / reps
+				original_output = getattr(s, '__original_output')
+				if type(s) not in mses['sim']:
+					mses['sim'].update({type(s): {}})
+					mses['us'].update({type(s): {}})
+				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
+				if len(original_output) > 2:
+					original_output = original_output.view(original_output.shape[0], -1)
+				gamma_viewed = original_output.shape + original_output.shape[1:]
+				se_us = mse_gamma(original_output, x.view_as(original_output), gamma.view(gamma_viewed) if gamma_shape is None else torch.zeros(gamma_viewed, device=x))
+				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
+
+		return mses
 
 
 	def quant(self, c_one=True):
@@ -93,6 +111,11 @@ class MemSE(nn.Module):
 	def clip_Gmax(self):
 		for i in range(len(self.learnt_Gmax)):
 			self.learnt_Gmax[i].data.copy_(self.learnt_Gmax[i].data.clamp(0.3,2))
+
+	@torch.no_grad()
+	def forward_noisy(self, x):
+		self.quanter.renoise()
+		self.model(x)
 
 def count_parameters(model):
 	table = PrettyTable(["Modules", "Parameters", "Mean"])

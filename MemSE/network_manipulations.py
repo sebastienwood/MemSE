@@ -71,7 +71,7 @@ def build_sequential_linear(conv):
         LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:]))
     )
     rand_y_repl = seq(rand_x)
-    assert torch.allclose(rand_y, rand_y_repl, atol=1e-6), 'Linear did not cast to a satisfying solution'
+    assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
 def recursive_setattr(obj, name, new):
@@ -113,7 +113,7 @@ def conv_to_fc(model, input_shape, verbose=False):
     if verbose:
         print("==> converted Conv2d to Linear")
         print(model)
-    assert torch.allclose(y, model(x)), 'Linear transformation did not go well'
+    assert torch.allclose(y, model(x), atol=1e-5), 'Linear transformation did not go well'
     return model
 
 
@@ -137,6 +137,20 @@ def get_intermediates(model, input):
         hooks[name] = module.register_forward_hook(hook_fn)
     _ = model(input)
     [h.remove() for h in hooks.values()]
+
+
+def store_add_intermediates_se(model):
+    hooks = {}
+    @torch.no_grad()
+    def hook_fn(self, input, output):
+        se = (output.clone().detach().cpu() - self.__original_output) ** 2
+        if not hasattr(self, '__se_output'):
+            self.__se_output = se
+        else:
+            self.__se_output += se
+    for name, module in model.named_modules():
+        hooks[name] = module.register_forward_hook(hook_fn)
+    return hooks
 
 
 def fuse_conv_bn(model):

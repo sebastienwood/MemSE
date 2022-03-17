@@ -78,7 +78,7 @@ def avgPool2d_layer_vec_gamma_batched(gamma, kernel_size:int=2, stride:int=2, pa
 	img_shape = gamma.shape[1:4]
 	ratio_sq = (1/(kernel_size ** 4))
 
-	nice_view = gamma.view(bs, -1, img_shape[1], img_shape[2])
+	nice_view = gamma.reshape(bs, -1, img_shape[1], img_shape[2])
 	nc_first = nice_view.shape[1]
 	convolution_filter = torch.full((nc_first, 1, kernel_size, kernel_size), 1., device=gamma.device, dtype=gamma.dtype) # TODO maybe just a view is enough if it takes too much space
 	first_res = torch.nn.functional.conv2d(nice_view, convolution_filter, stride=stride, padding=padding, groups=nc_first)
