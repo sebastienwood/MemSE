@@ -12,7 +12,6 @@ from MemSE.MemristorQuant import MemristorQuant
 #@torch.jit.script
 def linear_layer_vec_batched(mu, gamma:torch.Tensor, G, sigma_c, r:float, gamma_shape:Optional[List[int]]=None, gamma_only_diag:bool=False):
 	# TODO work in diagonal mode () / symmetric matrix storage for gamma ?
-	sigma_c *= math.sqrt(2)
 	new_gamma = torch.zeros(0)
 	new_mu = r * oe.contract('ij,bj->bi', G, mu)
 
@@ -40,6 +39,9 @@ def linear_layer_vec_batched(mu, gamma:torch.Tensor, G, sigma_c, r:float, gamma_
 		torch.diagonal(new_gamma, dim1=1, dim2=2).copy_(gg)
 	else:
 		new_gamma = gg
+
+	print(new_gamma.shape)
+	print(new_gamma.mean())
 
 	return new_mu, new_gamma, gamma_shape
 
@@ -166,6 +168,7 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 	batch_len = mu.shape[0]
 	image_shape = mu.shape[1:]
 	l = mu.shape[2]
+	
 
 	if W.shape[1] != image_shape.numel():
 		conv = True
@@ -179,12 +182,13 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 			gamma = torch.reshape(gamma,(batch_len,mu.shape[1],mu.shape[1]))
 
 	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax/Wmax # TODO columnwise validity ?
-	sigma_c = sigma / ct
+	sigma_p = sigma / ct
+	sigma_c = sigma * math.sqrt(2) / ct
 	Gpos = torch.clip(W, min=0)
 	Gneg = torch.clip(-W, min=0)
 
-	new_mu_pos, new_gamma_pos, _ = linear_layer_vec_batched(mu, gamma, Gpos, sigma_c, r, gamma_shape=gamma_shape, gamma_only_diag=True)
-	new_mu_neg, new_gamma_neg, _ = linear_layer_vec_batched(mu, gamma, Gneg, sigma_c, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+	new_mu_pos, new_gamma_pos, _ = linear_layer_vec_batched(mu, gamma, Gpos, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+	new_mu_neg, new_gamma_neg, _ = linear_layer_vec_batched(mu, gamma, Gneg, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
 
 	P_tot = energy_vec_batched(ct, W, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, r, gamma_shape=gamma_shape)
 

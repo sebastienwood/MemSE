@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -6,18 +7,19 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 
 from MemSE.MemristorQuant import MemristorQuant
-from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se
+from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se, store_add_intermediates_var
 from MemSE.utils import net_param_iterator
 from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
 from MemSE.nn import mse_gamma
 
 class MemSE(nn.Module):
-	def __init__(self, model, quanter, sigma:float=0.1, r:float=1., Gmax_init_Wmax:bool=True, input_bias:bool=True, input_shape=None):
+	def __init__(self, model, quanter, r:float=1., Gmax_init_Wmax:bool=False, input_bias:bool=True, input_shape=None):
 		super(MemSE, self).__init__()
 		self.model = model
 		self.quanter = quanter
-		self.sigma = sigma
 		self.r = r
+		if r != 1:
+			raise ValueError('Cannot work !')
 
 		self.input_bias = input_bias
 		if input_bias:
@@ -34,7 +36,11 @@ class MemSE(nn.Module):
 			if Gmax_init_Wmax:
 				# Init to Gmax == Wmax for learning
 				self.learnt_Gmax[i].data.copy_(self.quanter.Wmax[i]) # may not work with scalar
-		self.clip_Gmax()
+		#self.clip_Gmax()
+
+	@property
+	def sigma(self) -> float:
+		return self.quanter.std_noise
 
 	def forward(self, x):
 		if self.input_bias:
@@ -63,7 +69,14 @@ class MemSE(nn.Module):
 		get_intermediates(self.model, x)
 		self.quant(c_one=False)
 
+		# MU COMPUTATION
 		hooks = store_add_intermediates_se(self.model)
+		for _ in range(reps):
+			self.forward_noisy(x)
+		[h.remove() for h in hooks.values()]
+
+		# VAR COMPUTATION
+		hooks = store_add_intermediates_var(self.model, reps)
 		for _ in range(reps):
 			self.forward_noisy(x)
 		[h.remove() for h in hooks.values()]
@@ -75,6 +88,8 @@ class MemSE(nn.Module):
 		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
 		i = 0
 		mses = {'sim': {}, 'us': {}}
+		means = {'sim': {}, 'us': {}}
+		varis = {'sim': {}, 'us': {}}
 		for idx, s in enumerate(net_param_iterator(self.model)):
 			if isinstance(s,nn.Linear):
 				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape)
@@ -88,18 +103,28 @@ class MemSE(nn.Module):
 				continue
 			if hasattr(s, '__se_output'):
 				mse_output = getattr(s, '__se_output') / reps
+				th_output = getattr(s, '__th_output') / reps
+				va_output = getattr(s, '__var_output') / (reps) # TODO y'a un - 1 en fait mais Johny John est pas content
 				original_output = getattr(s, '__original_output')
 				if type(s) not in mses['sim']:
 					mses['sim'].update({type(s): {}})
 					mses['us'].update({type(s): {}})
+					means['sim'].update({type(s): {}})
+					means['us'].update({type(s): {}})
+					varis['sim'].update({type(s): {}})
+					varis['us'].update({type(s): {}})
 				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
-				if len(original_output) > 2:
+				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
+				means['us'].get(type(s)).update({idx: x.mean().detach().cpu().numpy()})
+				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
+				varis['us'].get(type(s)).update({idx: gamma.diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
+				if len(original_output.shape) > 2:
 					original_output = original_output.view(original_output.shape[0], -1)
 				gamma_viewed = original_output.shape + original_output.shape[1:]
 				se_us = mse_gamma(original_output, x.view_as(original_output), gamma.view(gamma_viewed) if gamma_shape is None else torch.zeros(gamma_viewed, device=x))
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 
-		return mses
+		return mses, means, varis
 
 
 	def quant(self, c_one=True):

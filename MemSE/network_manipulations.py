@@ -146,8 +146,23 @@ def store_add_intermediates_se(model):
         se = (output.clone().detach().cpu() - self.__original_output) ** 2
         if not hasattr(self, '__se_output'):
             self.__se_output = se
+            self.__th_output = output.clone().detach().cpu()
         else:
             self.__se_output += se
+            self.__th_output += output.clone().detach().cpu()
+    for name, module in model.named_modules():
+        hooks[name] = module.register_forward_hook(hook_fn)
+    return hooks
+
+
+def store_add_intermediates_var(model, reps):
+    hooks = {}
+    @torch.no_grad()
+    def hook_fn(self, input, output):
+        if not hasattr(self, '__var_output'):
+            self.__var_output = (output.clone().detach().cpu() - self.__th_output / reps) ** 2
+        else:
+            self.__var_output += (output.clone().detach().cpu() - self.__th_output / reps) ** 2
     for name, module in model.named_modules():
         hooks[name] = module.register_forward_hook(hook_fn)
     return hooks

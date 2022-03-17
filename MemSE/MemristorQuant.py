@@ -15,7 +15,7 @@ class MemristorQuant(object):
 				 model: nn.Module,
 				 types_handled = [nn.Linear],
 				 N: int = 128,
-				 wmax_mode:Union[str,WMAX_MODE] = WMAX_MODE.ALL,
+				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.ALL,
 				 Gmax=0.1,
 				 std_noise:float=1.) -> None:
 		super().__init__()
