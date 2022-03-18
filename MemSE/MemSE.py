@@ -29,7 +29,7 @@ class MemSE(nn.Module):
 		self.learnt_Gmax = nn.ParameterList()
 		for i in range(len(quanter.Gmax)):
 			if isinstance(quanter.Gmax[i], np.ndarray):
-				lgmax = torch.from_numpy(quanter.Gmax[i]).clone()
+				lgmax = torch.from_numpy(quanter.Gmax[i]).clone().float()
 			else:
 				lgmax = torch.tensor(quanter.Gmax[i]).clone()
 			self.learnt_Gmax.append(nn.Parameter(lgmax)) # can use quanter._init_Gmax if unsure quant has been cast already
@@ -116,13 +116,13 @@ class MemSE(nn.Module):
 				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
 				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
 				means['us'].get(type(s)).update({idx: x.mean().detach().cpu().numpy()})
-				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
-				varis['us'].get(type(s)).update({idx: gamma.diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
 				if len(original_output.shape) > 2:
 					original_output = original_output.view(original_output.shape[0], -1)
 				gamma_viewed = original_output.shape + original_output.shape[1:]
 				se_us = mse_gamma(original_output, x.view_as(original_output), gamma.view(gamma_viewed) if gamma_shape is None else torch.zeros(gamma_viewed, device=x))
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
+				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
+				varis['us'].get(type(s)).update({idx: gamma.view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
 
 		return mses, means, varis
 

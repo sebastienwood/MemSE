@@ -40,9 +40,6 @@ def linear_layer_vec_batched(mu, gamma:torch.Tensor, G, sigma_c, r:float, gamma_
 	else:
 		new_gamma = gg
 
-	print(new_gamma.shape)
-	print(new_gamma.mean())
-
 	return new_mu, new_gamma, gamma_shape
 
 @torch.jit.script
