@@ -5,5 +5,11 @@ torchvision
 scipy
 opt_einsum
 
+matplotlib
+tqdm
+prettytable
+
+pykeops
+
 -e .
 

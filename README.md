@@ -4,7 +4,7 @@ This repository contains a Pytorch implementation of MemSE as discussed in the p
 - "MemSE: Fast MSE Prediction for Noisy Memristor-Based DNN Accelerators" published in [AICAS2022](https://aicas2022.org)
 
 If this project is useful for you, please cite our work:
-```
+```bibtex
 @inproceedings{kern2022memse,
  title={MemSE: Fast MSE Prediction for Noisy Memristor-Based DNN Accelerators},
  author={Kern, Jonathan and Henwood, Sebastien and Gonçalo, Mordido and al.},
@@ -23,7 +23,7 @@ If this project is useful for you, please cite our work:
 
 To install from source, run the following commands:
 
-```
+```bash
 git clone https://github.com/sebastienwood/MemSE.git
 cd MemSE
 python setup.py install
