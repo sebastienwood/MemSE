@@ -105,7 +105,7 @@ class MemSE(nn.Module):
 				mse_output = getattr(s, '__se_output') / reps
 				th_output = getattr(s, '__th_output') / reps
 				va_output = getattr(s, '__var_output') / (reps) # TODO y'a un - 1 en fait mais Johny John est pas content
-				original_output = getattr(s, '__original_output')
+				original_output = getattr(s, '__original_output').to(x.device)
 				if type(s) not in mses['sim']:
 					mses['sim'].update({type(s): {}})
 					mses['us'].update({type(s): {}})
