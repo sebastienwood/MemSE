@@ -42,7 +42,7 @@ class MemSE(nn.Module):
 	def sigma(self) -> float:
 		return self.quanter.std_noise
 
-	def forward(self, x):
+	def forward(self, x, compute_power:bool = True):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 
@@ -52,7 +52,7 @@ class MemSE(nn.Module):
 		i = 0
 		for s in net_param_iterator(self.model):
 			if isinstance(s,nn.Linear):
-				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape)
+				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape, compute_power=compute_power)
 				P_tot += P_tot_i
 				i += 1
 			if isinstance(s,nn.Softplus):
@@ -60,6 +60,9 @@ class MemSE(nn.Module):
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 		return x, gamma, P_tot
+
+	def no_power_forward(self, x):
+		return self.forward(x, False)
 
 	def mse_forward(self, x, reps:int = 100):
 		if self.input_bias:

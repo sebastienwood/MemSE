@@ -161,7 +161,7 @@ def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None):
+def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None, compute_power:bool = True):
 	batch_len = mu.shape[0]
 	image_shape = mu.shape[1:]
 	l = mu.shape[2]
@@ -181,13 +181,17 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax/Wmax # TODO columnwise validity ?
 	sigma_p = sigma / ct
 	sigma_c = sigma * math.sqrt(2) / ct
-	Gpos = torch.clip(W, min=0)
-	Gneg = torch.clip(-W, min=0)
 
-	new_mu_pos, new_gamma_pos, _ = linear_layer_vec_batched(mu, gamma, Gpos, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
-	new_mu_neg, new_gamma_neg, _ = linear_layer_vec_batched(mu, gamma, Gneg, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+	if compute_power:
+		Gpos = torch.clip(W, min=0)
+		Gneg = torch.clip(-W, min=0)
 
-	P_tot = energy_vec_batched(ct, W, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, r, gamma_shape=gamma_shape)
+		new_mu_pos, new_gamma_pos, _ = linear_layer_vec_batched(mu, gamma, Gpos, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+		new_mu_neg, new_gamma_neg, _ = linear_layer_vec_batched(mu, gamma, Gneg, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+
+		P_tot = energy_vec_batched(ct, W, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, r, gamma_shape=gamma_shape)
+	else:
+		P_tot = 0.
 
 	mu, gamma, gamma_shape = linear_layer_vec_batched(mu, gamma, W, sigma_c, r, gamma_shape=gamma_shape)
 
