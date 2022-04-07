@@ -133,6 +133,8 @@ class MemristorQuant(object):
 			else:
 				c = torch.ones_like(Wmax).to(tensor)
 				self.Gmax[layer_idx] = self.Wmax[layer_idx] # fill in place
+		else:
+			self.Gmax[layer_idx] = self._initial_Gmax[layer_idx]
 		Gmax = torch.from_numpy(self.Gmax[layer_idx]).to(tensor) if self.wmax_mode == WMAX_MODE.COLUMNWISE and isinstance(self.Gmax[layer_idx], np.ndarray) else self.Gmax[layer_idx]
 		if not c_one:
 			c = Gmax / Wmax

@@ -143,13 +143,13 @@ class MemSE(nn.Module):
 	@torch.no_grad()
 	def forward_noisy(self, x):
 		self.quanter.renoise()
-		self.model(x)
+		return self.model(x)
 
 def count_parameters(model):
 	table = PrettyTable(["Modules", "Parameters", "Mean"])
 	total_params = 0
 	for name, parameter in model.named_parameters():
-		if not parameter.requires_grad: 
+		if not parameter.requires_grad:
 			continue
 		param = parameter.numel()
 		table.add_row([name, param, parameter.mean().detach().cpu().item()])
