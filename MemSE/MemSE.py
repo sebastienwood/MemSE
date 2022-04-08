@@ -43,6 +43,7 @@ class MemSE(nn.Module):
 		return self.quanter.std_noise
 
 	def forward(self, x, compute_power:bool = True):
+		assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 

@@ -26,9 +26,9 @@ class MemristorQuant(object):
 		self.Wmax = []
 		self.intermediate_params = {}
 		self.c = {}
-		if isinstance(wmax_mode, str):
-			wmax_mode = WMAX_MODE[wmax_mode.upper()]
-		self.wmax_mode = wmax_mode
+		
+		self.init_wmax(wmax_mode)
+
 		for m in model.modules():
 			if type(m) in types_handled:
 				self.saved_params.append(m.weight.data.clone().cpu())
@@ -40,28 +40,33 @@ class MemristorQuant(object):
 		self.noised = False
 		self.N = N
 
-		if wmax_mode == WMAX_MODE.ALL:
-			if isinstance(Gmax, float):
-				self.Gmax = np.full((len(self.saved_params)), Gmax)
-			elif isinstance(Gmax, np.ndarray) and Gmax.size == 1:
-				self.Gmax = np.full((len(self.saved_params)), Gmax[0])
-			elif isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params):
-				self.Gmax = np.copy(Gmax)
-			else:
-				raise ValueError('In network mode, expecting either float or ndarray of size 1')
-		elif wmax_mode == WMAX_MODE.LAYERWISE:
-			assert isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params)
-			self.Gmax = np.copy(Gmax)
-		elif wmax_mode == WMAX_MODE.COLUMNWISE:
-			assert isinstance(Gmax, np.ndarray) and Gmax.size == sum(self.n_vars)
-			self.Gmax = np.split(np.copy(Gmax), np.cumsum(self.n_vars))[:-1]
-		else:
-			raise ValueError('Not a supported wmax mode')
-		assert len(self.Gmax) == len(self.saved_params), 'Gmax is not of the right size'
+		self.init_gmax(Gmax)
 
-		self._initial_Gmax = copy.deepcopy(self.Gmax)
 		self.std_noise = std_noise
 		#print(f"Initialized memquant with {len(self.saved_params)} parameters quantified")
+
+	@property
+	def std_noise(self):
+		return self._std_noise
+
+	@std_noise.setter
+	def std_noise(self, std_noise):
+		self._std_noise = std_noise
+		self.param_update()
+
+	@property
+	def N(self):
+		return self._N
+
+	@N.setter
+	def N(self, N):
+		self._N = N
+		self.param_update()
+
+	def param_update(self):
+		if self.quanted:
+			self.unquant()
+			self.quant(self._last_c_one)
 
 	def __call__(self, input):
 		return self.forward(input)
@@ -71,12 +76,41 @@ class MemristorQuant(object):
 
 	def forward(self, input):
 		# WARNING: do not use this forward for learning, it does 2 forward with 1 batch
-		res_reliable = self.model(input).detach()
-		self.quant()
+		#res_reliable = self.model(input).detach()
+		#self.quant()
+		self.renoise()
 		res = self.model(input)
-		self.unquant()
-		self.MSE = torch.mean(torch.square(res - res_reliable))
+		#self.unquant()
+		#self.MSE = torch.mean(torch.square(res - res_reliable))
 		return res
+
+	def init_gmax(self, Gmax):
+		if self.wmax_mode == WMAX_MODE.ALL:
+			if isinstance(Gmax, float):
+				self.Gmax = np.full((len(self.saved_params)), Gmax)
+			elif isinstance(Gmax, np.ndarray) and Gmax.size == 1:
+				self.Gmax = np.full((len(self.saved_params)), Gmax[0])
+			elif isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params):
+				self.Gmax = np.copy(Gmax)
+			else:
+				raise ValueError('In network mode, expecting either float or ndarray of size 1')
+		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
+			assert isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params)
+			self.Gmax = np.copy(Gmax)
+		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
+			assert isinstance(Gmax, np.ndarray) and Gmax.size == sum(self.n_vars)
+			self.Gmax = np.split(np.copy(Gmax), np.cumsum(self.n_vars))[:-1]
+		else:
+			raise ValueError('Not a supported wmax mode')
+		assert len(self.Gmax) == len(self.saved_params), 'Gmax is not of the right size'
+		self._initial_Gmax = copy.deepcopy(self.Gmax)
+		self.param_update()
+
+	def init_wmax(self, wmax_mode):
+		if isinstance(wmax_mode, str):
+				wmax_mode = WMAX_MODE[wmax_mode.upper()]
+		self.wmax_mode = wmax_mode
+		self.param_update()
 
 	@staticmethod
 	def memory_usage(tensor):
@@ -90,6 +124,7 @@ class MemristorQuant(object):
 			print(f'Current version dtype {self.actual_params[i].dtype} on {self.actual_params[i].device} (taking {self.memory_usage(self.actual_params[i])}) MB')
 
 	def quant(self, c_one=False):
+		self._last_c_one = c_one
 		if self.quanted:
 			self.unquant()
 		for i in range(len(self.saved_params)):
@@ -109,6 +144,13 @@ class MemristorQuant(object):
 			self.actual_params[i].data -= torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
 		self.rescale()
 		self.noised = True
+
+	def denoise(self):
+		assert self.quanted, 'Cannot renoise the original representation'
+		for i, inter in self.intermediate_params.items():
+			self.actual_params[i].data.copy_(self.intermediate_params[i])
+		self.rescale()
+		self.noised = False
 
 	def rescale(self):
 		for i, _ in self.intermediate_params.items():

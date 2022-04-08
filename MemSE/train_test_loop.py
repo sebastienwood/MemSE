@@ -1,5 +1,7 @@
 import time
 
+from MemSE.nn import mse_gamma
+
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
@@ -34,7 +36,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-def test(testloader, model, criterion, device=None):
+def test(testloader, model, criterion, device=None, batch_stop:int=-1):
     global best_acc
 
     batch_time = AverageMeter()
@@ -69,4 +71,36 @@ def test(testloader, model, criterion, device=None):
         batch_time.update(time.time() - end)
         end = time.time()
 
+        if batch_stop == batch_idx + 1:
+            break
+
     return (losses.avg, top1.avg)
+
+
+def test_mse_th(testloader, model, device=None, batch_stop: int = -1):
+    mses, pows = [], []
+    for batch_idx, (inputs, targets) in enumerate(testloader):
+        inputs, targets = inputs.to(device), targets.to(device)
+        model.quanter.denoise()
+        mu, gamma, p_tot = model(inputs)
+        pows.extend(p_tot.cpu().tolist())
+        tar = model.model(inputs)
+        mse = mse_gamma(tar, mu, gamma)
+        mses.extend(mse.cpu().tolist())
+        if batch_stop == batch_idx + 1:
+            break
+    return mses, pows
+
+
+def test_mse_sim(testloader, model, device=None, batch_stop: int = -1, trials=100):
+    mses = []
+    for batch_idx, (inputs, targets) in enumerate(testloader):
+        inputs, targets = inputs.to(device), targets.to(device)
+        out = model.noisy_forward(inputs).detach()
+        for _ in range(trials - 1):
+            out += model.noisy_forward(inputs).detach()
+        out /= trials
+        mses.extend(out.cpu().tolist())
+        if batch_stop == batch_idx + 1:
+            break
+    return mses
