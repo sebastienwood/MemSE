@@ -20,6 +20,9 @@ class MemristorQuant(object):
 				 std_noise:float=1.) -> None:
 		super().__init__()
 		self.model = model
+		self.quanted = False
+		self.noised = False
+		
 		self.saved_params = []
 		self.actual_params = []
 		self.n_vars = []
@@ -36,10 +39,11 @@ class MemristorQuant(object):
 				self.n_vars.append(m.out_features)
 		for m in self.saved_params:
 			self.Wmax.append(self._Wmax(m))
-		self.quanted = False
-		self.noised = False
+		
 		self.N = N
 
+		if Gmax is None:
+			Gmax = 0.1
 		self.init_gmax(Gmax)
 
 		self.std_noise = std_noise

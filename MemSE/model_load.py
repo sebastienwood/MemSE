@@ -59,7 +59,7 @@ def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], dev
 
 	quanter = MemristorQuant(model, std_noise=std_noise, N=N, Gmax=loaded, wmax_mode=mode)
 	memse = MemSE(model, quanter, input_bias=None).to(device)
-		
+	
 	return memse
 
 

@@ -62,7 +62,7 @@ class MemSE(nn.Module):
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 			if output_handle:
-				for img_idx in gamma.shape[0]:
+				for img_idx in range(gamma.shape[0]):
 					plt.subplot(idx, img_idx)
 					plt.plot(gamma[img_idx].view(gamma[0].numel()/2, -1))
 		return x, gamma, P_tot
