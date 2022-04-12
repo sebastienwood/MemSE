@@ -11,11 +11,15 @@ from pathlib import Path
 
 from typing import Union
 
+
+ROOT_PRETRAINED = f'{ROOT}/MemSE/pretrained'
+
+
 def load_model(name: str, num_classes: int, save_name=None):
 	if save_name is None:
 		save_name = name
 	model = getattr(models, name)(num_classes=num_classes)
-	maybe_chkpt = Path(f'{ROOT}/MemSE/models/saves/{name}.pth')
+	maybe_chkpt = Path(f'{ROOT}/MemSE/models/saves/{save_name}.pth')
 	if maybe_chkpt.exists():
 		print('Loading model checkpoint')
 		loaded = torch.load(maybe_chkpt, map_location=torch.device('cpu'))
@@ -29,7 +33,7 @@ def load_model(name: str, num_classes: int, save_name=None):
 	return model
 
 
-def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], device, input_shape, std_noise:float = 0.01, N:int = 128, save_name=None):
+def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], device, input_shape, std_noise:float = 0.01, N:int = 128, save_name=None, **kwargs):
 	model = load_model(name, num_classes, save_name)
 	model = conv_to_fc(model, input_shape).to(device)
 
@@ -39,8 +43,15 @@ def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], dev
 	if save_name is None:
 		save_name = name
 
-	maybe_chkpt = Path(f'{ROOT}/MemSE/pretrained/{name}_{mode.name.lower()}.npy')
-	if maybe_chkpt.exists():
+	kw_str = ''
+	if kwargs:
+		for k, v in kwargs.items():
+			kw_str += f'_{k}_{v}'
+
+	maybe_chkpt = Path(f'{ROOT_PRETRAINED}/{save_name}/{mode.name.lower()}{kw_str}.npy')
+	if 'gmax' in kwargs:
+		loaded = kwargs['gmax']
+	elif maybe_chkpt.exists():
 		print('Loading memristor config')
 		loaded = np.load(maybe_chkpt)
 	else:
@@ -50,3 +61,17 @@ def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], dev
 	memse = MemSE(model, quanter, input_bias=None).to(device)
 		
 	return memse
+
+
+def find_existing(name: str):
+	res = {}
+	path_dir = Path(f'{ROOT_PRETRAINED}/{name}/').glob('*.npy')
+	for path in path_dir:
+		to_parse = str(path)
+		splited = to_parse.split('_')
+		mode = splited[0]
+		if not mode in res:
+			res[mode] = []
+		res[mode].append({splited[i*2]: splited[(i*2)+1] for i in range((len(splited)-1) / 2)})
+	return res
+		
