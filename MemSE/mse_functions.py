@@ -10,7 +10,7 @@ from MemSE.utils import net_param_iterator
 from MemSE.MemristorQuant import MemristorQuant
 
 #@torch.jit.script
-def linear_layer_vec_batched(mu, gamma:torch.Tensor, G, sigma_c, r:float, gamma_shape:Optional[List[int]]=None, gamma_only_diag:bool=False):
+def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma_shape:Optional[List[int]]=None, gamma_only_diag:bool=False):
 	# TODO work in diagonal mode () / symmetric matrix storage for gamma ?
 	new_gamma = torch.zeros(0)
 	new_mu = r * oe.contract('ij,bj->bi', G, mu)

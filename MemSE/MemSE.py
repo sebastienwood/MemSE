@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from prettytable import PrettyTable
 
@@ -42,7 +43,7 @@ class MemSE(nn.Module):
 	def sigma(self) -> float:
 		return self.quanter.std_noise
 
-	def forward(self, x, compute_power:bool = True):
+	def forward(self, x, compute_power: bool = True, output_handle=False):
 		assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
@@ -51,21 +52,25 @@ class MemSE(nn.Module):
 		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
 		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
 		i = 0
-		for s in net_param_iterator(self.model):
-			if isinstance(s,nn.Linear):
+		for idx, s in enumerate(net_param_iterator(self.model)):
+			if isinstance(s, nn.Linear):
 				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape, compute_power=compute_power)
 				P_tot += P_tot_i
 				i += 1
-			if isinstance(s,nn.Softplus):
+			if isinstance(s, nn.Softplus):
 				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
+			if output_handle:
+				for img_idx in gamma.shape[0]:
+					plt.subplot(idx, img_idx)
+					plt.plot(gamma[img_idx].view(gamma[0].numel()/2, -1))
 		return x, gamma, P_tot
 
 	def no_power_forward(self, x):
 		return self.forward(x, False)
 
-	def mse_forward(self, x, reps:int = 100):
+	def mse_forward(self, x, reps: int = 100):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 		
