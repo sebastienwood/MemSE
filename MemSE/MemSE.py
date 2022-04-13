@@ -70,7 +70,8 @@ class MemSE(nn.Module):
 				fig.suptitle(f'{idx}th layer ({current_type})')
 				for img_idx in range(gamma.shape[0]):
 					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
-					axs[img_idx].imshow(reshaped)
+					hdle = axs[img_idx].imshow(reshaped)
+				fig.colorbar(hdle, ax=axs.ravel().tolist())
 				plt.show()
 		return x, gamma, P_tot
 
