@@ -1,4 +1,4 @@
-from multiprocessing.sharedctypes import Value
+import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -52,19 +52,26 @@ class MemSE(nn.Module):
 		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
 		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
 		i = 0
+		current_type = None
 		for idx, s in enumerate(net_param_iterator(self.model)):
 			if isinstance(s, nn.Linear):
 				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape, compute_power=compute_power)
 				P_tot += P_tot_i
 				i += 1
+				current_type = 'FC'
 			if isinstance(s, nn.Softplus):
 				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
+				current_type = 'Softplus'
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
+				current_type = 'AvgPool2D'
 			if output_handle:
+				fig, axs = plt.subplots(gamma.shape[0], figsize=(30,30))
+				fig.suptitle(f'{idx}th layer ({current_type})')
 				for img_idx in range(gamma.shape[0]):
-					plt.subplot(idx, img_idx)
-					plt.plot(gamma[img_idx].view(gamma[0].numel()/2, -1))
+					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
+					axs[img_idx].imshow(reshaped)
+				plt.show()
 		return x, gamma, P_tot
 
 	def no_power_forward(self, x):
