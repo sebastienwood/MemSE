@@ -66,12 +66,21 @@ class MemSE(nn.Module):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 				current_type = 'AvgPool2D'
 			if output_handle:
-				fig, axs = plt.subplots(gamma.shape[0], figsize=(30,30))
-				fig.suptitle(f'{idx}th layer ({current_type})')
-				for img_idx in range(gamma.shape[0]):
-					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
-					hdle = axs[img_idx].imshow(reshaped)
-				fig.colorbar(hdle, ax=axs.ravel().tolist())
+				#fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
+				#fig, axs = plt.subplots(figsize=(15,15), sharex=True)
+				#fig.suptitle(f'{idx}th layer ({current_type})')
+				plt.figure(figsize=(12,4))
+				reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
+				plt.hist([r.flatten() for r in reshaped], bins=25, density=True, label=list(range(gamma.shape[0])))
+				plt.title(f'{idx}th layer ({current_type})')
+				plt.yscale('log')
+				plt.legend()
+				#for img_idx in range(gamma.shape[0]):
+					#reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
+					#hdle = axs[img_idx].imshow(reshaped)
+					#axs[img_idx].hist(reshaped.flatten().numpy(), bins=50)
+					#axs.hist(reshaped.flatten().numpy(), bins=50)
+				#fig.colorbar(hdle, ax=axs.ravel().tolist())
 				plt.show()
 		return x, gamma, P_tot
 
