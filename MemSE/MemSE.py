@@ -37,13 +37,15 @@ class MemSE(nn.Module):
 			if Gmax_init_Wmax:
 				# Init to Gmax == Wmax for learning
 				self.learnt_Gmax[i].data.copy_(self.quanter.Wmax[i]) # may not work with scalar
+
+		self._var_batch = {}
 		#self.clip_Gmax()
 
 	@property
 	def sigma(self) -> float:
 		return self.quanter.std_noise
 
-	def forward(self, x, compute_power: bool = True, output_handle=False):
+	def forward(self, x, compute_power: bool = True, output_handle=None):
 		assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
@@ -65,10 +67,7 @@ class MemSE(nn.Module):
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 				current_type = 'AvgPool2D'
-			if output_handle:
-				#fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
-				#fig, axs = plt.subplots(figsize=(15,15), sharex=True)
-				#fig.suptitle(f'{idx}th layer ({current_type})')
+			if output_handle == 'density':
 				plt.figure(figsize=(12,4))
 				reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
 				plt.hist([r.flatten() for r in reshaped], bins=25, density=True, label=list(range(gamma.shape[0])))
@@ -82,6 +81,18 @@ class MemSE(nn.Module):
 					#axs.hist(reshaped.flatten().numpy(), bins=50)
 				#fig.colorbar(hdle, ax=axs.ravel().tolist())
 				plt.show()
+			elif output_handle == 'imshow':
+				fig, axs = plt.subplots(gamma.shape[0], figsize=(8,8), sharex=True)
+				fig.suptitle(f'{idx}th layer ({current_type})')
+				for img_idx in range(gamma.shape[0]):
+					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
+					hdle = axs[img_idx].imshow(reshaped)
+				fig.colorbar(hdle, ax=axs.ravel().tolist())
+				plt.show()
+			maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
+			mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
+			self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
+			#self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
 		return x, gamma, P_tot
 
 	def no_power_forward(self, x):

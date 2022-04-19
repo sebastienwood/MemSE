@@ -55,3 +55,9 @@ def get_output_dataset(dataloader, model):
     dataset = copy.deepcopy(dataloader.dataset)
     dataset.targets = np.concatenate(new_targets)
     return dataset
+
+def get_output_loader(dataloader, model, shuffle: bool = False):
+    dataset = get_output_dataset(dataloader, model)
+    bs = dataloader.batch_size
+    num_workers = dataloader.num_workers
+    return data.DataLoader(dataset, batch_size=bs, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
