@@ -82,7 +82,7 @@ class MemSE(nn.Module):
 				#fig.colorbar(hdle, ax=axs.ravel().tolist())
 				plt.show()
 			elif output_handle == 'imshow':
-				fig, axs = plt.subplots(gamma.shape[0], figsize=(8,8), sharex=True)
+				fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
 				fig.suptitle(f'{idx}th layer ({current_type})')
 				for img_idx in range(gamma.shape[0]):
 					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
