@@ -243,3 +243,8 @@ def _problem_function_batched(Gmax, args, x, z, device_id=None, torch_dtype=torc
 
 	quanter.unquant()
 	return torch.mean(P_tot, dim=0), torch.mean(max_mse, dim=0)
+
+# TODO : dict lict approach for ops -> (stack-style calls)
+# - support kwargs in definitions 
+# - input/outputs (mu, gamma, gamma_shape, p_tot) should be passed around with a dict and updated accordingly
+OPS_MSE = {nn.Softplus: softplus_vec_batched, nn.AvgPool2d: avgPool2d_layer_vec_batched}

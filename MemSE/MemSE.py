@@ -74,12 +74,6 @@ class MemSE(nn.Module):
 				plt.title(f'{idx}th layer ({current_type})')
 				plt.yscale('log')
 				plt.legend()
-				#for img_idx in range(gamma.shape[0]):
-					#reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
-					#hdle = axs[img_idx].imshow(reshaped)
-					#axs[img_idx].hist(reshaped.flatten().numpy(), bins=50)
-					#axs.hist(reshaped.flatten().numpy(), bins=50)
-				#fig.colorbar(hdle, ax=axs.ravel().tolist())
 				plt.show()
 			elif output_handle == 'imshow':
 				fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
