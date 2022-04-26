@@ -42,30 +42,31 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 
 	return new_mu, new_gamma, gamma_shape
 
+def sigmoid_coefs(order:int):
+	c = np.zeros(order + 1, dtype=int)
+	c[0] = 1
+	for i in range(1, order + 1):
+		for j in range(i, -1, -1):
+			c[j] = -j * c[j - 1] + (j + 1) * c[j]
+	return c
+
 #@torch.jit.script
 def dd_softplus(ten, beta:float=1, threshold:float=20, order: int = 2):
 	x = ten * beta
 	thresh_mask = (x < threshold).to(dtype=ten.dtype) * beta
 	dsf = x.sigmoid()
 
-	c = np.zeros(order + 1, dtype=int)
-	c[0] = 1
-	for i in range(1, order + 1):
-		for j in range(i, -1, -1):
-			c[j] = -j * c[j - 1] + (j + 1) * c[j]
-
 	res = {0: dsf * thresh_mask,
 		   1: dsf * (1 - dsf) * thresh_mask}
 	if order > 2:
-		ref = 0.0
-		for i in range(order, -1, -1):
-			ref = dsf * (c[i] + ref)
-		print(ref.mean())
-
 		for order_i in range(2, order + 1):
-			res[order_i] = dsf * (c[order_i - 1] + res[order_i - 1])
-		print(res[order].mean())
-		assert torch.allclose(ref, res[order])
+			fc = dsf * torch.from_numpy(sigmoid_coefs(order_i)).unsqueeze(1).to(dsf)
+			ref = fc[order_i]
+			for i in range(order_i - 1, -1, -1):
+				ref = (fc[i] + dsf * ref)
+
+			res[order_i] = ref * thresh_mask
+
 	return res[0], res[1], res
 
 #@torch.jit.script
@@ -96,7 +97,7 @@ def softplus_vec_batched_d(mu,
 						  beta:float=1,
 						  threshold:float=20):
 	mu_r = torch.nn.functional.softplus(mu, beta=beta, threshold=threshold)
-	d_mu, dd_mu = dd_softplus(mu)
+	d_mu, dd_mu, softplus_d = dd_softplus(mu)
 
 	if gamma_shape is not None:
 		gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
