@@ -14,13 +14,23 @@ from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPoo
 from MemSE.nn import mse_gamma
 
 class MemSE(nn.Module):
-	def __init__(self, model, quanter, r:float=1., Gmax_init_Wmax:bool=False, input_bias:bool=True, input_shape=None):
+	def __init__(self,
+				 model,
+				 quanter,
+				 r: float=1.,
+				 Gmax_init_Wmax: bool=False,
+				 input_bias: bool=True,
+				 input_shape=None,
+				 taylor_order: int=2):
 		super(MemSE, self).__init__()
 		self.model = model
 		self.quanter = quanter
 		self.r = r
+		self.taylor_order = taylor_order
 		if r != 1:
 			raise ValueError('Cannot work !')
+		if taylor_order < 1:
+			raise ValueError('Taylor approx needs to be at least of order 1')
 
 		self.input_bias = input_bias
 		if input_bias:
@@ -62,7 +72,7 @@ class MemSE(nn.Module):
 				i += 1
 				current_type = 'FC'
 			if isinstance(s, nn.Softplus):
-				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
+				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape, degree_taylor=self.taylor_order)
 				current_type = 'Softplus'
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)

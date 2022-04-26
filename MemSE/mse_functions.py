@@ -70,7 +70,7 @@ def dd_softplus(ten, beta:float=1, threshold:float=20, order: int = 2):
 	return res[0], res[1], res
 
 #@torch.jit.script
-def softplus_vec_batched(mu, gamma:torch.Tensor, gamma_shape:Optional[List[int]]=None, beta:float=1, threshold:float=20):
+def softplus_vec_batched_old(mu, gamma:torch.Tensor, gamma_shape:Optional[List[int]]=None, beta:float=1, threshold:float=20):
 	mu_r = torch.nn.functional.softplus(mu, beta=beta, threshold=threshold)
 	d_mu, dd_mu, _ = dd_softplus(mu)
 
@@ -90,14 +90,14 @@ def softplus_vec_batched(mu, gamma:torch.Tensor, gamma_shape:Optional[List[int]]
 
 	return mu_r, ga_r, gamma_shape
 
-def softplus_vec_batched_d(mu, 
+def softplus_vec_batched(mu,
 						  gamma:torch.Tensor,
 						  gamma_shape:Optional[List[int]]=None,
 						  degree_taylor:int=2,
 						  beta:float=1,
 						  threshold:float=20):
 	mu_r = torch.nn.functional.softplus(mu, beta=beta, threshold=threshold)
-	d_mu, dd_mu, softplus_d = dd_softplus(mu)
+	d_mu, dd_mu, softplus_d = dd_softplus(mu, order=6)
 
 	if gamma_shape is not None:
 		gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
@@ -105,19 +105,28 @@ def softplus_vec_batched_d(mu,
 		# TODO check if gamma init cannot be delegated further if its zero
 		# TODO check if gamma is only diagonal elements to simplify first pass
 
+	#second_comp.register_hook(lambda grad: print(grad.mean()))
+
+	ga_r = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu,d_mu,gamma)
+	second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', dd_mu, dd_mu)
+	ga_r -= oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, gamma, gamma)
+	gg = ga_r.diagonal(dim1=1, dim2=2)
+
 	g_2 = oe.contract('bcijcij->bcij', gamma)
 	if degree_taylor >= 2:
 		mu_r += 0.5 * oe.contract('bcij,bcij->bcij', dd_mu, g_2)
 	if degree_taylor >= 4:
-		mu_r += 0.125 * oe.contract('bcij,bcij->bcij', dddd_mu, g_2 ** 2)
+		mu_r += 0.125 * oe.contract('bcij,bcij->bcij', softplus_d[4], g_2 ** 2)
+
+		fourth_comp = 2 * (softplus_d[2] / 2) ** 2 + oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[3])
+		gg += oe.contract('bcij,bcij->bcij', fourth_comp, g_2 ** 2)
 	if degree_taylor >= 6:
-		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', dddddd_mu, g_2 ** 4)
+		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', softplus_d[6], g_2 ** 4)
 
-	first_comp = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu,d_mu,gamma)
-	second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', dd_mu, dd_mu)
-	#second_comp.register_hook(lambda grad: print(grad.mean()))
-
-	ga_r = first_comp - oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, gamma, gamma)
+		six_comp = (softplus_d[3] / 6) ** 2 * 15
+		six_comp += (1/4) * oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[5])
+		six_comp += (1/2) * oe.contract('bcij,bcij->bcij', softplus_d[2], softplus_d[4])
+		gg += oe.contract('bcij,bcij->bcij', six_comp, g_2 ** 4)
 
 	return mu_r, ga_r, gamma_shape
 
