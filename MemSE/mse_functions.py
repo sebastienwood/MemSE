@@ -99,6 +99,10 @@ def softplus_vec_batched(mu,
 	mu_r = torch.nn.functional.softplus(mu, beta=beta, threshold=threshold)
 	d_mu, dd_mu, softplus_d = dd_softplus(mu, order=6)
 
+	gamma_view = gamma.view(gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
+	sigma_2 = gamma_view.diagonal(dim1=1, dim2=2)
+	sigma_2 = sigma_2.view(*gamma.shape[:4])
+
 	if gamma_shape is not None:
 		gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
 		gamma_shape = None
@@ -118,23 +122,22 @@ def softplus_vec_batched(mu,
 	print(ga_view.diagonal(dim1=1, dim2=2).mean())
 	gg = gg.view(*ga_r.shape[:4])
 
-	g_2 = oe.contract('bcijcij->bcij', gamma)
 	if degree_taylor >= 2:
-		mu_r += 0.5 * oe.contract('bcij,bcij->bcij', dd_mu, g_2)
+		mu_r += 0.5 * oe.contract('bcij,bcij->bcij', dd_mu, sigma_2)
 
-		gg += oe.contract('bcij,bcij->bcij', softplus_d[1] ** 2, g_2)
+		gg += oe.contract('bcij,bcij->bcij', softplus_d[1] ** 2, sigma_2)
 	if degree_taylor >= 4:
-		mu_r += 0.125 * oe.contract('bcij,bcij->bcij', softplus_d[4], g_2 ** 2)
+		mu_r += 0.125 * oe.contract('bcij,bcij->bcij', softplus_d[4], sigma_2 ** 2)
 
 		fourth_comp = 2 * (softplus_d[2] / 2) ** 2 + oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[3])
-		gg += oe.contract('bcij,bcij->bcij', fourth_comp, g_2 ** 2)
+		gg += oe.contract('bcij,bcij->bcij', fourth_comp, sigma_2 ** 2)
 	if degree_taylor >= 6:
-		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', softplus_d[6], g_2 ** 4)
+		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', softplus_d[6], sigma_2 ** 4)
 
 		six_comp = (softplus_d[3] / 6) ** 2 * 15
 		six_comp += (1/4) * oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[5])
 		six_comp += (1/2) * oe.contract('bcij,bcij->bcij', softplus_d[2], softplus_d[4])
-		gg += oe.contract('bcij,bcij->bcij', six_comp, g_2 ** 4)
+		gg += oe.contract('bcij,bcij->bcij', six_comp, sigma_2 ** 4)
 
 	print(ga_view.diagonal(dim1=1, dim2=2).mean())
 	return mu_r, ga_r, gamma_shape
