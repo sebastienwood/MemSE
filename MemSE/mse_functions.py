@@ -56,18 +56,18 @@ def dd_softplus(ten, beta:float=1, threshold:float=20, order: int = 2):
 	thresh_mask = (x < threshold).to(dtype=ten.dtype) * beta
 	dsf = x.sigmoid()
 
-	res = {0: dsf * thresh_mask,
-		   1: dsf * (1 - dsf) * thresh_mask}
+	res = {1: dsf * thresh_mask,
+		   2: dsf * (1 - dsf) * thresh_mask}
 	if order > 2:
 		for order_i in range(2, order + 1):
-			fc = dsf * torch.from_numpy(sigmoid_coefs(order_i)).unsqueeze(1).to(dsf)
-			ref = fc[order_i]
+			c = torch.from_numpy(sigmoid_coefs(order_i)).to(dsf)
+			ref = dsf * c[order_i]
 			for i in range(order_i - 1, -1, -1):
-				ref = (fc[i] + dsf * ref)
+				ref = dsf * (c[i] + ref)
 
-			res[order_i] = ref * thresh_mask
+			res[order_i + 1] = ref * thresh_mask
 
-	return res[0], res[1], res
+	return res[1], res[2], res
 
 #@torch.jit.script
 def softplus_vec_batched_old(mu, gamma:torch.Tensor, gamma_shape:Optional[List[int]]=None, beta:float=1, threshold:float=20):
@@ -110,11 +110,19 @@ def softplus_vec_batched(mu,
 	ga_r = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu,d_mu,gamma)
 	second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', dd_mu, dd_mu)
 	ga_r -= oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, gamma, gamma)
-	gg = ga_r.diagonal(dim1=1, dim2=2)
+
+	ga_view = ga_r.view(ga_r.shape[0], ga_r.shape[1]*ga_r.shape[2]*ga_r.shape[3], -1)
+	gg = ga_view.diagonal(dim1=1, dim2=2)
+	print(gg.mean())
+	gg.fill_(0.)
+	print(ga_view.diagonal(dim1=1, dim2=2).mean())
+	gg = gg.view(*ga_r.shape[:4])
 
 	g_2 = oe.contract('bcijcij->bcij', gamma)
 	if degree_taylor >= 2:
 		mu_r += 0.5 * oe.contract('bcij,bcij->bcij', dd_mu, g_2)
+
+		gg += oe.contract('bcij,bcij->bcij', softplus_d[1] ** 2, g_2)
 	if degree_taylor >= 4:
 		mu_r += 0.125 * oe.contract('bcij,bcij->bcij', softplus_d[4], g_2 ** 2)
 
@@ -128,6 +136,7 @@ def softplus_vec_batched(mu,
 		six_comp += (1/2) * oe.contract('bcij,bcij->bcij', softplus_d[2], softplus_d[4])
 		gg += oe.contract('bcij,bcij->bcij', six_comp, g_2 ** 4)
 
+	print(ga_view.diagonal(dim1=1, dim2=2).mean())
 	return mu_r, ga_r, gamma_shape
 
 @torch.jit.script
