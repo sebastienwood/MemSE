@@ -137,7 +137,7 @@ class MemSE(nn.Module):
 				P_tot += P_tot_i
 				i += 1
 			elif isinstance(s,nn.Softplus):
-				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape)
+				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape, degree_taylor=self.taylor_order)
 			elif isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 			else:
