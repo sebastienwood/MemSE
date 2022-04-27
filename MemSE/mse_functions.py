@@ -132,12 +132,12 @@ def softplus_vec_batched(mu,
 		fourth_comp = 2 * (softplus_d[2] / 2) ** 2 + oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[3])
 		gg += oe.contract('bcij,bcij->bcij', fourth_comp, sigma_2 ** 2)
 	if degree_taylor >= 6:
-		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', softplus_d[6], sigma_2 ** 4)
+		mu_r += (15/720) * oe.contract('bcij,bcij->bcij', softplus_d[6], sigma_2 ** 3)
 
 		six_comp = (softplus_d[3] / 6) ** 2 * 15
 		six_comp += (1/4) * oe.contract('bcij,bcij->bcij', softplus_d[1], softplus_d[5])
 		six_comp += (1/2) * oe.contract('bcij,bcij->bcij', softplus_d[2], softplus_d[4])
-		gg += oe.contract('bcij,bcij->bcij', six_comp, sigma_2 ** 4)
+		gg += oe.contract('bcij,bcij->bcij', six_comp, sigma_2 ** 3)
 
 	print(ga_view.diagonal(dim1=1, dim2=2).mean())
 	return mu_r, ga_r, gamma_shape
