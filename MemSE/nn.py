@@ -10,3 +10,11 @@ def mse_gamma(tar, mu, gamma, verbose: bool = False):
         print(f'VAR IMPORTANCE {res_v / tot}')
         print(f'EXP IMPORTANCE {res_e / tot}')
     return exp + vari
+
+
+def diagonal_replace(tensor, diagonal):
+    print(torch.diagonal(tensor, dim1=1, dim2=2).mean())
+    mask = torch.diag(torch.ones(diagonal.shape[1:], device=tensor.device)).unsqueeze_(0)
+    out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
+    print(torch.diagonal(out, dim1=1, dim2=2).mean())
+    return out

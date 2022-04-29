@@ -8,6 +8,7 @@ from pykeops.torch import LazyTensor
 from typing import Optional, List
 from MemSE.utils import net_param_iterator
 from MemSE.MemristorQuant import MemristorQuant
+from MemSE.nn import diagonal_replace
 
 #@torch.jit.script
 def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma_shape:Optional[List[int]]=None, gamma_only_diag:bool=False):
@@ -28,15 +29,16 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 		if not gamma_only_diag:
 			new_gamma = oe.contract('ij,bjk,kl->bil', r ** 2 * G, gamma, G.T)
 		diag_gamma = torch.diagonal(gamma, dim1=1, dim2=2).clone()
-		torch.diagonal(gamma, dim1=1, dim2=2).fill_(0.)
+		torch.diagonal(gamma, dim1=1, dim2=2).data.fill_(0)
 		gg += oe.contract('ij,bjk,ik->bi', G, gamma, G)
 		gg += oe.contract('bi,ji->bj', diag_gamma, torch.square(G)) #2nd term
 		gg += oe.contract('bij,i->bi', diag_gamma.unsqueeze(dim=1).expand((diag_gamma.shape[0], G.shape[0],)+diag_gamma.shape[1:]), sigma_c_sq) # 3rd term
-		torch.diagonal(gamma, dim1=1, dim2=2).copy_(diag_gamma) # ensure inplace didn't change original input
+		torch.diagonal(gamma, dim1=1, dim2=2).data.copy_(diag_gamma) # ensure inplace didn't change original input
 
 	gg *= r ** 2
 	if not gamma_only_diag:
-		torch.diagonal(new_gamma, dim1=1, dim2=2).copy_(gg)
+		#torch.diagonal(new_gamma, dim1=1, dim2=2).copy_(gg)
+		new_gamma = diagonal_replace(new_gamma, gg)
 	else:
 		new_gamma = gg
 
@@ -109,18 +111,12 @@ def softplus_vec_batched(mu,
 		# TODO check if gamma init cannot be delegated further if its zero
 		# TODO check if gamma is only diagonal elements to simplify first pass
 
-	#second_comp.register_hook(lambda grad: print(grad.mean()))
-
 	ga_r = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu,d_mu,gamma)
 	second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', dd_mu, dd_mu)
 	ga_r -= oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, gamma, gamma)
 
 	ga_view = ga_r.view(ga_r.shape[0], ga_r.shape[1]*ga_r.shape[2]*ga_r.shape[3], -1)
-	gg = ga_view.diagonal(dim1=1, dim2=2)
-	print(gg.mean())
-	gg.fill_(0.)
-	print(ga_view.diagonal(dim1=1, dim2=2).mean())
-	gg = gg.view(*ga_r.shape[:4])
+	gg = torch.zeros(*ga_r.shape[:4], device=ga_r.device, dtype=ga_r.dtype)
 
 	if degree_taylor >= 2:
 		mu_r += 0.5 * oe.contract('bcij,bcij->bcij', dd_mu, sigma_2)
@@ -139,7 +135,10 @@ def softplus_vec_batched(mu,
 		six_comp += (1/2) * oe.contract('bcij,bcij->bcij', softplus_d[2], softplus_d[4])
 		gg += oe.contract('bcij,bcij->bcij', six_comp, sigma_2 ** 3)
 
-	print(ga_view.diagonal(dim1=1, dim2=2).mean())
+	#ga_view.diagonal(dim1=1, dim2=2).view(*ga_r.shape[:4]).copy_(gg)
+	ga_r = diagonal_replace(ga_view, gg.view(*ga_view.diagonal(dim1=1, dim2=2).shape)).view(*ga_r.shape)
+
+	#print(ga_view.diagonal(dim1=1, dim2=2).mean())
 	return mu_r, ga_r, gamma_shape
 
 @torch.jit.script
