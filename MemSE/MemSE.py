@@ -21,12 +21,14 @@ class MemSE(nn.Module):
 				 Gmax_init_Wmax: bool=False,
 				 input_bias: bool=True,
 				 input_shape=None,
-				 taylor_order: int=2):
+				 taylor_order: int=2,
+				 post_processing=None):
 		super(MemSE, self).__init__()
 		self.model = model
 		self.quanter = quanter
 		self.r = r
 		self.taylor_order = taylor_order
+		self.post_processing = post_processing
 		if r != 1:
 			raise ValueError('Cannot work !')
 		if taylor_order < 1:
@@ -77,26 +79,10 @@ class MemSE(nn.Module):
 			if isinstance(s, nn.AvgPool2d):
 				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
 				current_type = 'AvgPool2D'
-			if output_handle == 'density':
-				plt.figure(figsize=(12,4))
-				reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
-				plt.hist([r.flatten() for r in reshaped], bins=25, density=True, label=list(range(gamma.shape[0])))
-				plt.title(f'{idx}th layer ({current_type})')
-				plt.yscale('log')
-				plt.legend()
-				plt.show()
-			elif output_handle == 'imshow':
-				fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
-				fig.suptitle(f'{idx}th layer ({current_type})')
-				for img_idx in range(gamma.shape[0]):
-					reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
-					hdle = axs[img_idx].imshow(reshaped)
-				fig.colorbar(hdle, ax=axs.ravel().tolist())
-				plt.show()
-			maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
-			mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
-			self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
-			#self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
+
+			self.plot_gamma(gamma, output_handle, current_type, idx)
+			
+			
 		return x, gamma, P_tot
 
 	def no_power_forward(self, x):
@@ -148,12 +134,10 @@ class MemSE(nn.Module):
 				va_output = getattr(s, '__var_output') / (reps) # TODO y'a un - 1 en fait mais Johny John est pas content
 				original_output = getattr(s, '__original_output').to(x.device)
 				if type(s) not in mses['sim']:
-					mses['sim'].update({type(s): {}})
-					mses['us'].update({type(s): {}})
-					means['sim'].update({type(s): {}})
-					means['us'].update({type(s): {}})
-					varis['sim'].update({type(s): {}})
-					varis['us'].update({type(s): {}})
+					for t in ['sim', 'us']:
+						mses[t].update({type(s): {}})
+						means[t].update({type(s): {}})
+						varis[t].update({type(s): {}})
 				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
 				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
 				means['us'].get(type(s)).update({idx: x.mean().detach().cpu().numpy()})
@@ -182,6 +166,28 @@ class MemSE(nn.Module):
 	def forward_noisy(self, x):
 		self.quanter.renoise()
 		return self.model(x)
+
+	def plot_gamma(self, gamma, output_handle, current_type, idx):
+		if output_handle == 'density':
+			plt.figure(figsize=(12,4))
+			reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
+			plt.hist([r.flatten() for r in reshaped], bins=25, density=True, label=list(range(gamma.shape[0])))
+			plt.title(f'{idx}th layer ({current_type})')
+			plt.yscale('log')
+			plt.legend()
+			plt.show()
+		elif output_handle == 'imshow':
+			fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True)
+			fig.suptitle(f'{idx}th layer ({current_type})')
+			for img_idx in range(gamma.shape[0]):
+				reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
+				hdle = axs[img_idx].imshow(reshaped)
+			fig.colorbar(hdle, ax=axs.ravel().tolist())
+			plt.show()
+		maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
+		mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
+		self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
+		#self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
 
 def count_parameters(model):
 	table = PrettyTable(["Modules", "Parameters", "Mean"])

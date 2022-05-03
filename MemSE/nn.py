@@ -21,7 +21,10 @@ def diagonal_replace(tensor, diagonal):
 
 
 def zero_but_diag_(tensor):
-    pass
+    diag = tensor.diagonal(dim1=1, dim2=2).data.clone()
+    tensor.data.zero_()
+    tensor.diagonal(dim1=1, dim2=2).data.copy_(diag)
+
 
 def quant_but_diag_(tensor, quant_scheme):
     pass
