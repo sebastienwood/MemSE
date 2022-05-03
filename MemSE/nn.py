@@ -13,8 +13,15 @@ def mse_gamma(tar, mu, gamma, verbose: bool = False):
 
 
 def diagonal_replace(tensor, diagonal):
-    print(torch.diagonal(tensor, dim1=1, dim2=2).mean())
+    '''Backprop compatible diagonal replacement
+    '''
     mask = torch.diag(torch.ones(diagonal.shape[1:], device=tensor.device)).unsqueeze_(0)
     out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
-    print(torch.diagonal(out, dim1=1, dim2=2).mean())
     return out
+
+
+def zero_but_diag_(tensor):
+    pass
+
+def quant_but_diag_(tensor, quant_scheme):
+    pass
