@@ -1,4 +1,5 @@
 import time
+from MemSE.MemSE import MemSE
 
 from MemSE.nn import mse_gamma
 
@@ -77,7 +78,7 @@ def test(testloader, model, criterion, device=None, batch_stop:int=-1):
     return (losses.avg, top1.avg)
 
 
-def test_mse_th(testloader, model, device=None, batch_stop: int = -1):
+def test_mse_th(testloader, model: MemSE, device=None, batch_stop: int = -1):
     mses, pows = [], []
     for batch_idx, (inputs, targets) in enumerate(testloader):
         inputs, targets = inputs.to(device), targets.to(device)
@@ -92,13 +93,13 @@ def test_mse_th(testloader, model, device=None, batch_stop: int = -1):
     return mses, pows
 
 
-def test_mse_sim(testloader, model, device=None, batch_stop: int = -1, trials=100):
+def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, trials=100):
     mses = []
     for batch_idx, (inputs, targets) in enumerate(testloader):
         inputs, targets = inputs.to(device), targets.to(device)
-        out = model.noisy_forward(inputs).detach()
+        out = model.forward_noisy(inputs).detach()
         for _ in range(trials - 1):
-            out += model.noisy_forward(inputs).detach()
+            out += model.forward_noisy(inputs).detach()
         out /= trials
         mses.extend(out.cpu().tolist())
         if batch_stop == batch_idx + 1:

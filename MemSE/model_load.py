@@ -43,10 +43,14 @@ def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], dev
 	if save_name is None:
 		save_name = name
 
+	new_instance_kwargs = {}
 	kw_str = ''
 	if kwargs:
 		for k, v in kwargs.items():
 			kw_str += f'_{k}_{v}'
+
+			if k == 'post_processing':
+				new_instance_kwargs[k] = v
 
 	maybe_chkpt = Path(f'{ROOT_PRETRAINED}/{save_name}/{mode.name.lower()}{kw_str}.npy')
 	if 'gmax' in kwargs:
@@ -58,7 +62,7 @@ def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], dev
 		loaded = None
 
 	quanter = MemristorQuant(model, std_noise=std_noise, N=N, Gmax=loaded, wmax_mode=mode)
-	memse = MemSE(model, quanter, input_bias=None).to(device)
+	memse = MemSE(model, quanter, input_bias=None, **new_instance_kwargs).to(device)
 	
 	return memse
 

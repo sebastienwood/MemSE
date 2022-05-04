@@ -11,7 +11,7 @@ from MemSE.MemristorQuant import MemristorQuant
 from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se, store_add_intermediates_var
 from MemSE.utils import net_param_iterator
 from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
-from MemSE.nn import mse_gamma
+from MemSE.nn import mse_gamma, zero_but_diag_
 
 class MemSE(nn.Module):
 	def __init__(self,
@@ -81,7 +81,7 @@ class MemSE(nn.Module):
 				current_type = 'AvgPool2D'
 
 			self.plot_gamma(gamma, output_handle, current_type, idx)
-			
+			self.post_process_gamma(gamma)	
 			
 		return x, gamma, P_tot
 
@@ -188,6 +188,11 @@ class MemSE(nn.Module):
 		mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
 		self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
 		#self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
+	
+	def post_process_gamma(self, gamma):
+		if self.post_processing == 'zero_but_diag':
+			zero_but_diag_(gamma)
+		
 
 def count_parameters(model):
 	table = PrettyTable(["Modules", "Parameters", "Mean"])
