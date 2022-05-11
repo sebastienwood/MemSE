@@ -3,6 +3,27 @@ import torch.nn as nn
 from MemSE.utils import count_parameters
 from MemSE.conv_decompositions import tucker_decomposition_conv_layer
 
+def resnet_layer_fusion_generator(layer_idx, downsample: bool):
+    lys = []
+    b = f'layer{layer_idx}.'
+    for i in range(2):
+        for j in range(1, 3):
+            lys.append([f'{b}{i}.conv{j}', f'{b}{i}.bn{j}'])
+        if downsample and i == 0:
+            lys.append([f'{b}{i}.downsample.0', f'{b}{i}.downsample.1'])
+    return lys
+
+MODELS_FUSION = {
+    'resnet18': [
+                  ['conv1', 'bn1'],
+                  *resnet_layer_fusion_generator(1, False), # TODO c'est pas joli joli mais c'est plutôt flexible
+                  *resnet_layer_fusion_generator(2, True),
+                  *resnet_layer_fusion_generator(3, True),
+                  *resnet_layer_fusion_generator(4, True)
+                ]
+}
+
+
 #from https://github.com/pytorch/pytorch/issues/26781#issuecomment-821054668
 def convmatrix2d(kernel, image_shape, padding=None):
     # kernel: (out_channels, in_channels, kernel_height, kernel_width, ...)
@@ -22,8 +43,8 @@ def convmatrix2d(kernel, image_shape, padding=None):
     assert len(image_shape[1:]) == len(kernel.shape[2:])
     result_dims = torch.tensor(image_shape[1:]) - torch.tensor(kernel.shape[2:]) + 1
     m = torch.zeros((
-        kernel.shape[0], 
-        *result_dims, 
+        kernel.shape[0],
+        *result_dims,
         *image_shape
     ))
     for i in range(m.shape[1]):
@@ -62,6 +83,7 @@ def build_sequential_linear(conv):
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
     conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding)
+    print(conv_fced.shape)
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
     linear.weight.data = conv_fced
     seq = nn.Sequential(
@@ -71,6 +93,9 @@ def build_sequential_linear(conv):
         LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:]))
     )
     rand_y_repl = seq(rand_x)
+    print(rand_y.shape)
+    print('*'*15)
+    print(rand_y_repl.shape)
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
@@ -94,6 +119,7 @@ def replace_op(model, fx):
 @torch.no_grad()
 def conv_to_fc(model, input_shape, verbose=False):
     model = model.cpu()
+    model.eval()
     if verbose:
         print(model)
 
@@ -114,6 +140,7 @@ def conv_to_fc(model, input_shape, verbose=False):
         print("==> converted Conv2d to Linear")
         print(model)
     assert torch.allclose(y, model(x), atol=1e-5), 'Linear transformation did not go well'
+    model.train()
     return model
 
 
@@ -168,7 +195,20 @@ def store_add_intermediates_var(model, reps):
     return hooks
 
 
-def fuse_conv_bn(model):
+def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
     #TODO https://github.com/pytorch/pytorch/blob/40cbf342d3c000712da92cfafeaca651b3e0bd3e/torch/fx/experimental/optimization.py#L50
     # when we get to model with bn
-    pass
+    #MODS = [torch.nn.Conv2d, torch.nn.BatchNorm2d]
+    #modules_to_fuse = []
+    #modules = list(model.named_modules())
+    #for (f_n, f_m), (s_n, s_m) in zip(modules[1:], modules[:-1]):
+    #    if type(f_m) in MODS and type(s_m) in MODS:
+    #        modules_to_fuse.append([f_n, s_n])
+        # TODO should skip next iter if found, shouldn't happen with classical topologies
+
+    #print(modules_to_fuse)
+    modules_to_fuse = MODELS_FUSION[model_name.lower()]
+    print(modules_to_fuse)
+
+    fused_m = torch.quantization.fuse_modules(model, modules_to_fuse)
+    return fused_m

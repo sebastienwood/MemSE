@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 from MemSE.definitions import ROOT, WMAX_MODE
-from MemSE.network_manipulations import conv_to_fc
+from MemSE.network_manipulations import conv_to_fc, fuse_conv_bn
 from MemSE.MemristorQuant import MemristorQuant
 from MemSE.MemSE import MemSE
 
@@ -15,10 +15,10 @@ from typing import Union
 ROOT_PRETRAINED = f'{ROOT}/MemSE/pretrained'
 
 
-def load_model(name: str, num_classes: int, save_name=None):
+def load_model(name: str, num_classes: int, input_shape, save_name=None, **kwargs):
 	if save_name is None:
 		save_name = name
-	model = getattr(models, name)(num_classes=num_classes)
+	model = getattr(models, name)(num_classes=num_classes, **kwargs)
 	maybe_chkpt = Path(f'{ROOT}/MemSE/models/saves/{save_name}.pth')
 	if maybe_chkpt.exists():
 		print('Loading model checkpoint')
@@ -30,13 +30,13 @@ def load_model(name: str, num_classes: int, save_name=None):
 				rename_state_dict.pop(key)
 		loaded['state_dict'] = rename_state_dict
 		model.load_state_dict(loaded['state_dict'])
+	model.eval()
+	model = fuse_conv_bn(model, name)
+	model = conv_to_fc(model, input_shape)
 	return model
 
 
-def load_memristor(name: str, num_classes: int, mode: Union[WMAX_MODE, str], device, input_shape, std_noise:float = 0.01, N:int = 128, save_name=None, **kwargs):
-	model = load_model(name, num_classes, save_name)
-	model = conv_to_fc(model, input_shape).to(device)
-
+def load_memristor(model, name: str, mode: Union[WMAX_MODE, str], device, std_noise:float = 0.01, N:int = 128, save_name=None, **kwargs):
 	if isinstance(mode, str):
 		mode = WMAX_MODE[mode.upper()]
 	

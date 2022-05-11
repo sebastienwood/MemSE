@@ -168,6 +168,7 @@ class MemristorQuant(object):
 			for i in range(len(self.saved_params)):
 				self.actual_params[i].data.copy_(self.saved_params[i].to(self.actual_params[i].data))
 		self.quanted = False
+		self.noised = False
 
 	@torch.no_grad()
 	def _quantize(self, tensor, layer_idx=None, c_one=False) -> None:
