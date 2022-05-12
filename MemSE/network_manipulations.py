@@ -20,7 +20,8 @@ MODELS_FUSION = {
                   *resnet_layer_fusion_generator(2, True),
                   *resnet_layer_fusion_generator(3, True),
                   *resnet_layer_fusion_generator(4, True)
-                ]
+                ],
+    'smallest_vgg': None
 }
 
 
@@ -99,6 +100,10 @@ def build_sequential_linear(conv):
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
+@torch.no_grad()
+def build_sequential_unfolded_linear(conv):
+    pass
+
 def recursive_setattr(obj, name, new):
     splitted = name.split('.', 1)
     if len(splitted) == 1:
@@ -117,12 +122,7 @@ def replace_op(model, fx):
 
 
 @torch.no_grad()
-def conv_to_fc(model, input_shape, verbose=False):
-    model = model.cpu()
-    model.eval()
-    if verbose:
-        print(model)
-
+def record_shapes(model, input_shape):
     x = torch.rand(input_shape)
     x = x[None, :, :, :]
 
@@ -134,6 +134,17 @@ def conv_to_fc(model, input_shape, verbose=False):
         hooks[name] = module.register_forward_hook(hook_fn)
     y = model(x)
     [h.remove() for h in hooks.values()]
+    return y
+
+
+@torch.no_grad()
+def conv_to_fc(model, input_shape, verbose=False):
+    model = model.cpu()
+    model.eval()
+    if verbose:
+        print(model)
+
+    y = record_shapes(model, input_shape)
     
     replace_op(model, build_sequential_linear)
     if verbose:
@@ -208,7 +219,6 @@ def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
 
     #print(modules_to_fuse)
     modules_to_fuse = MODELS_FUSION[model_name.lower()]
-    print(modules_to_fuse)
-
-    fused_m = torch.quantization.fuse_modules(model, modules_to_fuse)
-    return fused_m
+    if modules_to_fuse is not None:
+        return torch.quantization.fuse_modules(model, modules_to_fuse)
+    return model
