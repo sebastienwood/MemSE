@@ -37,17 +37,19 @@ class Conv2DUF(nn.Module):
         super().__init__()
         self.c = conv
         self.output_shape = output_shape
-        self.w = conv.weight.detach().clone().view(conv.weight.size(0), -1).t()
-        #self.linear_equiv = nn.Linear(input_shape[1:].numel(),
-        #                              output_shape[1:].numel(),
-        #                              bias=True if conv.bias is not None else False,
-        #                              device=conv.weight.device,
-        #                              dtype=conv.weight.dtype)
-        #self.linear_equiv.weight.data.copy_(w)
-        #self.linear_equiv.bias.data.copy_(conv.bias)
+        self.weight = conv.weight.detach().clone().view(conv.weight.size(0), -1).t()
+        self.bias = conv.bias.detach().clone()
+        print(self.bias.shape)
 
     def forward(self, x):
         inp_unf = torch.nn.functional.unfold(x, self.c.kernel_size, self.c.dilation, self.c.padding, self.c.stride)
-        out_unf = inp_unf.transpose(1, 2).matmul(self.w).transpose(1, 2)
+        out_unf = inp_unf.transpose(1, 2).matmul(self.weight).transpose(1, 2)
         out = out_unf.view(*self.output_shape)
+        if self.bias is not None:
+            print(out.shape)
+            out += self.bias[:, None, None]
         return out
+
+    @staticmethod
+    def memse(conv2duf, memse_dict):
+        pass

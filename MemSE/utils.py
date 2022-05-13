@@ -5,6 +5,8 @@ import gc
 
 from typing import Iterator
 
+from MemSE.nn import Conv2DUF
+
 def maybe_cuda_from_numpy(tensor, device_id=0, dtype=None, use_cuda:bool=False):
   if type(tensor) is np.ndarray:
     tensor = torch.from_numpy(tensor)
@@ -22,7 +24,7 @@ def print_compare(original, other):
 def net_param_iterator(model: nn.Module) -> Iterator:
   ignored = []
   for _, module in model.named_modules():
-    if type(module) in [nn.AvgPool2d, nn.BatchNorm2d, nn.Softplus, nn.Linear, nn.Softmax]:
+    if type(module) in [nn.AvgPool2d, nn.BatchNorm2d, nn.Softplus, nn.Linear, nn.Softmax, Conv2DUF]:
       yield module
     else:
       ignored.append(type(module))

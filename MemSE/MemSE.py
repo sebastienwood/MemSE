@@ -11,7 +11,14 @@ from MemSE.MemristorQuant import MemristorQuant
 from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se, store_add_intermediates_var
 from MemSE.utils import net_param_iterator
 from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
-from MemSE.nn import mse_gamma, zero_but_diag_
+from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
+
+NN_2_METHOD = {
+	nn.Linear: linear_layer_logic,
+	nn.Softplus: softplus_vec_batched,
+	nn.AvgPool2d: avgPool2d_layer_vec_batched,
+	Conv2DUF: Conv2DUF.memse
+}
 
 class MemSE(nn.Module):
 	def __init__(self,
@@ -68,6 +75,7 @@ class MemSE(nn.Module):
 		i = 0
 		current_type = None
 		for idx, s in enumerate(net_param_iterator(self.model)):
+			# TODO work by dict passing as parameter that gets updated, LUT dict NN_2_METHOD
 			if isinstance(s, nn.Linear):
 				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape, compute_power=compute_power)
 				P_tot += P_tot_i
@@ -81,7 +89,7 @@ class MemSE(nn.Module):
 				current_type = 'AvgPool2D'
 
 			self.plot_gamma(gamma, output_handle, current_type, idx)
-			self.post_process_gamma(gamma)	
+			self.post_process_gamma(gamma)
 			
 		return x, gamma, P_tot
 

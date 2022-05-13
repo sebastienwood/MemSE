@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 import copy
 from MemSE.definitions import WMAX_MODE
+from MemSE.nn import Conv2DUF
 
 from typing import Union
 
@@ -13,7 +14,7 @@ __all__ = ['MemristorQuant']
 class MemristorQuant(object):
 	def __init__(self,
 				 model: nn.Module,
-				 types_handled = [nn.Linear],
+				 types_handled = [nn.Linear, Conv2DUF],
 				 N: int = 128,
 				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.ALL,
 				 Gmax=0.1,
