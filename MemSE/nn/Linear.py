@@ -118,7 +118,15 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 
 
 def linear(module, data):
-	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight, data['mu'], data['gamma'], module.weight.learnt_Gmax, module.weight.Wmax, data['sigma'], data['r'], data['gamma_shape'], compute_power=data['compute_power'])
+	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
+													    data['mu'],
+														data['gamma'],
+														module.weight.learnt_Gmax,
+														module.weight.Wmax,
+														data['sigma'],
+														data['r'],
+														data['gamma_shape'],
+														compute_power=data['compute_power'])
 	data['P_tot'] += P_tot_i
 	data['current_type'] = 'Linear'
 	data['mu'] = x
