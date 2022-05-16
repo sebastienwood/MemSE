@@ -37,15 +37,15 @@ class Conv2DUF(nn.Module):
         super().__init__()
         self.c = conv
         self.output_shape = output_shape
-        exemplar = self.unfold_input(torch.rand(input_shape))
-        self.weight = conv.weight.detach().clone().view(conv.weight.size(0), -1).t().unsqueeze_(0)
-        self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
+        #exemplar = self.unfold_input(torch.rand(input_shape))
+        self.weight = conv.weight.detach().clone().view(conv.weight.size(0), -1).t()#.unsqueeze_(0)
+        #self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
         self.bias = conv.bias.detach().clone()
 
     def forward(self, x):
         inp_unf = self.unfold_input(x)
-        out_unf = torch.einsum('bfp,pfc->bcp', inp_unf, self.weight)
-        #out_unf_t = inp_unf.transpose(1, 2).matmul(self.weight).transpose(1, 2)
+        #out_unf = torch.einsum('bfp,pfc->bcp', inp_unf, self.weight)
+        out_unf = inp_unf.transpose(1, 2).matmul(self.weight).transpose(1, 2)
         out = out_unf.view(*self.output_shape)
         if self.bias is not None:
             out += self.bias[:, None, None]
