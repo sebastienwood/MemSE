@@ -274,6 +274,28 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 			gamma = torch.reshape(gamma, (batch_len,*mu.shape[1:],*mu.shape[1:]))
 	return mu, gamma, P_tot, gamma_shape
 
+def linear(module, data):
+	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight, data['mu'], data['gamma'], module.weight.learnt_Gmax, module.weight.Wmax, data['sigma'], data['r'], data['gamma_shape'], compute_power=data['compute_power'])
+	data['P_tot'] += P_tot_i
+	data['current_type'] = 'Linear'
+	data['mu'] = x
+	data['gamma'] = gamma
+	data['gamma_shape'] = gamma_shape
+
+def softplus(module, data):
+	x, gamma, gamma_shape = softplus_vec_batched(data['mu'], data['gamma'], data['gamma_shape'], degree_taylor=data['taylor_order'])
+	data['current_type'] = 'Softplus'
+	data['mu'] = x
+	data['gamma'] = gamma
+	data['gamma_shape'] = gamma_shape
+
+def avgPool2d(module, data):
+	x, gamma, gamma_shape = avgPool2d_layer_vec_batched(data['mu'], data['gamma'], module.kernel_size, module.stride, module.padding, data['gamma_shape'])
+	data['current_type'] = 'AvgPool2D'
+	data['mu'] = x
+	data['gamma'] = gamma
+	data['gamma_shape'] = gamma_shape
+
 def _mm_pow_th_b(model, Gmax, Wmax, mu, sigma, r):
 	gamma_shape = [*mu.shape,*mu.shape[1:]]
 	gamma = torch.zeros(0)

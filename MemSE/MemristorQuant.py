@@ -38,8 +38,9 @@ class MemristorQuant(object):
 				self.saved_params.append(m.weight.data.clone().cpu())
 				self.actual_params.append(m.weight)
 				self.n_vars.append(m.out_features)
-		for m in self.saved_params:
+		for idx, m in enumerate(self.saved_params):
 			self.Wmax.append(self._Wmax(m))
+			self.actual_params[idx].Wmax = self.Wmax[idx]
 		
 		self.N = N
 

@@ -10,15 +10,18 @@ from prettytable import PrettyTable
 from MemSE.MemristorQuant import MemristorQuant
 from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se, store_add_intermediates_var
 from MemSE.utils import net_param_iterator
-from MemSE.mse_functions import linear_layer_logic, softplus_vec_batched, avgPool2d_layer_vec_batched
+from MemSE.mse_functions import linear, softplus, avgPool2d
 from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
 
 NN_2_METHOD = {
-	nn.Linear: linear_layer_logic,
-	nn.Softplus: softplus_vec_batched,
-	nn.AvgPool2d: avgPool2d_layer_vec_batched,
+	nn.Linear: linear,
+	nn.Softplus: softplus,
+	nn.AvgPool2d: avgPool2d,
 	Conv2DUF: Conv2DUF.memse
 }
+
+def NOOP(*args, **kwargs):
+	return
 
 class MemSE(nn.Module):
 	def __init__(self,
@@ -56,7 +59,7 @@ class MemSE(nn.Module):
 			if Gmax_init_Wmax:
 				# Init to Gmax == Wmax for learning
 				self.learnt_Gmax[i].data.copy_(self.quanter.Wmax[i]) # may not work with scalar
-
+			quanter.actual_params[i].learnt_Gmax = self.learnt_Gmax[i]
 		self._var_batch = {}
 		#self.clip_Gmax()
 
@@ -69,29 +72,23 @@ class MemSE(nn.Module):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 
-		gamma_shape = [*x.shape, *x.shape[1:]]
-		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
-		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
-		i = 0
-		current_type = None
+		data = {
+			'mu': x,
+			'gamma_shape': [*x.shape, *x.shape[1:]],
+			'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
+			'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
+			'current_type': None,
+			'compute_power': compute_power,
+			'taylor_order': self.taylor_order,
+			'sigma': self.sigma,
+			'r': self.r
+		}
 		for idx, s in enumerate(net_param_iterator(self.model)):
-			# TODO work by dict passing as parameter that gets updated, LUT dict NN_2_METHOD
-			if isinstance(s, nn.Linear):
-				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape, compute_power=compute_power)
-				P_tot += P_tot_i
-				i += 1
-				current_type = 'FC'
-			if isinstance(s, nn.Softplus):
-				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape, degree_taylor=self.taylor_order)
-				current_type = 'Softplus'
-			if isinstance(s, nn.AvgPool2d):
-				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
-				current_type = 'AvgPool2D'
-
-			self.plot_gamma(gamma, output_handle, current_type, idx)
-			self.post_process_gamma(gamma)
+			NN_2_METHOD.get(type(s), NOOP)(s, data)
+			self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
+			self.post_process_gamma(data['gamma'])
 			
-		return x, gamma, P_tot
+		return data['mu'], data['gamma'], data['P_tot']
 
 	def no_power_forward(self, x):
 		return self.forward(x, False)
@@ -118,23 +115,23 @@ class MemSE(nn.Module):
 		self.unquant()
 		self.quant() #c_one = True
 
-		gamma_shape = [*x.shape, *x.shape[1:]]
-		gamma = torch.zeros(0, device=x.device, dtype=x.dtype)
-		P_tot = torch.zeros(x.shape[0], device=x.device, dtype=x.dtype)
-		i = 0
 		mses = {'sim': {}, 'us': {}}
 		means = {'sim': {}, 'us': {}}
 		varis = {'sim': {}, 'us': {}}
+
+		data = {
+			'mu': x,
+			'gamma_shape': [*x.shape, *x.shape[1:]],
+			'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
+			'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
+			'current_type': None,
+			'taylor_order': self.taylor_order,
+			'sigma': self.sigma,
+			'r': self.r
+		}
 		for idx, s in enumerate(net_param_iterator(self.model)):
-			if isinstance(s,nn.Linear):
-				x, gamma, P_tot_i, gamma_shape = linear_layer_logic(s.weight, x, gamma, self.learnt_Gmax[i], self.quanter.Wmax[i], self.sigma, self.r, gamma_shape)
-				P_tot += P_tot_i
-				i += 1
-			elif isinstance(s,nn.Softplus):
-				x, gamma, gamma_shape = softplus_vec_batched(x, gamma, gamma_shape, degree_taylor=self.taylor_order)
-			elif isinstance(s, nn.AvgPool2d):
-				x, gamma, gamma_shape = avgPool2d_layer_vec_batched(x, gamma, s.kernel_size, s.stride, s.padding, gamma_shape)
-			else:
+			NN_2_METHOD.get(type(s), NOOP)(s, data)
+			if type(s) not in NN_2_METHOD:
 				continue
 			if hasattr(s, '__se_output'):
 				mse_output = getattr(s, '__se_output') / reps
@@ -148,14 +145,14 @@ class MemSE(nn.Module):
 						varis[t].update({type(s): {}})
 				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
 				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
-				means['us'].get(type(s)).update({idx: x.mean().detach().cpu().numpy()})
+				means['us'].get(type(s)).update({idx: data['mu'].mean().detach().cpu().numpy()})
 				if len(original_output.shape) > 2:
 					original_output = original_output.view(original_output.shape[0], -1)
 				gamma_viewed = original_output.shape + original_output.shape[1:]
-				se_us = mse_gamma(original_output, x.view_as(original_output), gamma.view(gamma_viewed) if gamma_shape is None else torch.zeros(gamma_viewed, device=x))
+				se_us = mse_gamma(original_output, data['mu'].view_as(original_output), data['gamma'].view(gamma_viewed) if data['gamma_shape'] is None else torch.zeros(gamma_viewed, device=x))
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
-				varis['us'].get(type(s)).update({idx: gamma.view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
+				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
 
 		return mses, means, varis
 
