@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from MemSE.nn import Conv2DUF
 from MemSE.utils import count_parameters
 from MemSE.conv_decompositions import tucker_decomposition_conv_layer
 
@@ -102,7 +103,9 @@ def build_sequential_linear(conv):
 
 @torch.no_grad()
 def build_sequential_unfolded_linear(conv):
-    pass
+    current_input_shape = conv.__input_shape
+    current_output_shape = conv.__output_shape
+    return Conv2DUF(conv, current_input_shape, current_output_shape)
 
 def recursive_setattr(obj, name, new):
     splitted = name.split('.', 1)
@@ -122,10 +125,7 @@ def replace_op(model, fx):
 
 
 @torch.no_grad()
-def record_shapes(model, input_shape):
-    x = torch.rand(input_shape)
-    x = x[None, :, :, :]
-
+def record_shapes(model, x):
     def hook_fn(self, input, output):
         self.__input_shape = input[0].shape
         self.__output_shape = output.size()
@@ -138,21 +138,37 @@ def record_shapes(model, input_shape):
 
 
 @torch.no_grad()
-def conv_to_fc(model, input_shape, verbose=False):
+def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
+    assert impl in ['linear', 'unfolded']
+    if impl == 'linear':
+        op = build_sequential_linear
+    else:
+        op = build_sequential_unfolded_linear
     model = model.cpu()
     model.eval()
     if verbose:
         print(model)
 
-    y = record_shapes(model, input_shape)
+    x = torch.rand(input_shape)
+    x = x[None, :, :, :]
+
+    y = record_shapes(model, x)
     
-    replace_op(model, build_sequential_linear)
+    replace_op(model, op)
     if verbose:
         print("==> converted Conv2d to Linear")
         print(model)
     assert torch.allclose(y, model(x), atol=1e-5), 'Linear transformation did not go well'
     model.train()
     return model
+
+
+def conv_to_fc(model, input_shape, verbose=False):
+    return conv_to_memristor(model, input_shape, verbose, impl='linear')
+
+
+def conv_to_unfolded(model, input_shape, verbose=False):
+    return conv_to_memristor(model, input_shape, verbose, impl='unfolded')
 
 
 def conv_decomposition(model, verbose=False):
