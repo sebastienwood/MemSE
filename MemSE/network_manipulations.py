@@ -115,10 +115,12 @@ def recursive_setattr(obj, name, new):
         return recursive_setattr(getattr(obj, splitted[0]), splitted[1], new)
 
 
-def replace_op(model, fx):
+def replace_op(model, fx, old_module=torch.nn.Conv2d):
     new_modules = {}
+    if not isinstance(old_module, list):
+        old_module = [old_module]
     for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Conv2d):
+        if type(module) in old_module:
             new_fc = fx(module)
             new_modules[name] = new_fc
     [recursive_setattr(model, n, fc) for n, fc in new_modules.items()]
@@ -169,6 +171,13 @@ def conv_to_fc(model, input_shape, verbose=False):
 
 def conv_to_unfolded(model, input_shape, verbose=False):
     return conv_to_memristor(model, input_shape, verbose, impl='unfolded')
+
+
+def act_to_act(model, activation_type):
+    assert isinstance(activation_type, nn.Module)
+    ACTIVATIONS = [nn.ReLU, nn.Softplus, nn.GELU]
+    ACTIVATIONS.pop(activation_type)
+    replace_op(model, activation_type, ACTIVATIONS)
 
 
 def conv_decomposition(model, verbose=False):

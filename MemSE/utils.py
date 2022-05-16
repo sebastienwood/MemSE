@@ -1,3 +1,4 @@
+from MemSE.definitions import SUPPORTED_OPS, UNSUPPORTED_OPS
 import torch
 import torch.nn as nn
 import numpy as np
@@ -24,8 +25,10 @@ def print_compare(original, other):
 def net_param_iterator(model: nn.Module) -> Iterator:
   ignored = []
   for _, module in model.named_modules():
-    if type(module) in [nn.AvgPool2d, nn.BatchNorm2d, nn.Softplus, nn.Linear, nn.Softmax, Conv2DUF]:
+    if type(module) in SUPPORTED_OPS.keys():
       yield module
+    elif type(module) in UNSUPPORTED_OPS:
+      raise ValueError(f'The network is using an unsupported operation {type(module)}')
     else:
       ignored.append(type(module))
   #print(set(ignored))

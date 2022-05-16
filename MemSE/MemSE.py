@@ -12,13 +12,7 @@ from MemSE.network_manipulations import get_intermediates, store_add_intermediat
 from MemSE.utils import net_param_iterator
 from MemSE.mse_functions import linear, softplus, avgPool2d
 from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
-
-NN_2_METHOD = {
-	nn.Linear: linear,
-	nn.Softplus: softplus,
-	nn.AvgPool2d: avgPool2d,
-	Conv2DUF: Conv2DUF.memse
-}
+from MemSE.definitions import SUPPORTED_OPS
 
 def NOOP(*args, **kwargs):
 	return
@@ -84,7 +78,7 @@ class MemSE(nn.Module):
 			'r': self.r
 		}
 		for idx, s in enumerate(net_param_iterator(self.model)):
-			NN_2_METHOD.get(type(s), NOOP)(s, data)
+			SUPPORTED_OPS.get(type(s), NOOP)(s, data)
 			self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
 			self.post_process_gamma(data['gamma'])
 			
@@ -130,8 +124,8 @@ class MemSE(nn.Module):
 			'r': self.r
 		}
 		for idx, s in enumerate(net_param_iterator(self.model)):
-			NN_2_METHOD.get(type(s), NOOP)(s, data)
-			if type(s) not in NN_2_METHOD:
+			SUPPORTED_OPS.get(type(s), NOOP)(s, data)
+			if type(s) not in SUPPORTED_OPS:
 				continue
 			if hasattr(s, '__se_output'):
 				mse_output = getattr(s, '__se_output') / reps

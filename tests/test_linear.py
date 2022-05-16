@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import timeit
 
-from MemSE.mse_functions import linear_layer_vec_batched
+from MemSE.nn.Linear import linear_layer_vec_batched
 from MemSE.keops_mse_functions import k_linear_layer
 from MemSE.network_manipulations import build_sequential_linear, record_shapes
 from MemSE.nn import Conv2DUF
