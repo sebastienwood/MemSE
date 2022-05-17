@@ -32,10 +32,11 @@ class Conv2DUF(nn.Module):
 
     @staticmethod
     def mse_var(conv2duf, memse_dict, c):
-        #gamma ...
-        first_comp = (gamma + memse_dict['mu'] ** 2 + ) * memse_dict['sigma'] ** 2 / c ** 2
-        first_comp = nn.functional.conv2d(first_comp, torch.ones_like(conv2duf.weight), stride=conv2duf.stride, padding=conv2duf.padding, dilation=conv2duf.dilation, groups=conv2duf.groups)
-        conv_sq = conv2duf.weight ** 2
-        first_comp += nn.functional.conv2d(gamma, conv_sq, stride=conv2duf.stride, padding=conv2duf.padding, dilation=conv2duf.dilation, groups=conv2duf.groups)
-
-        second_comp = 
+        #gamma ... is the diagonal elements of memse_dict gamma in shape of mu
+        #first_comp = (gamma + memse_dict['mu'] ** 2 + ) * memse_dict['sigma'] ** 2 / c ** 2
+        #first_comp = nn.functional.conv2d(first_comp, torch.ones_like(conv2duf.weight), stride=conv2duf.stride, padding=conv2duf.padding, dilation=conv2duf.dilation, groups=conv2duf.groups)
+        #conv_sq = conv2duf.weight ** 2
+        #first_comp += nn.functional.conv2d(gamma, conv_sq, stride=conv2duf.stride, padding=conv2duf.padding, dilation=conv2duf.dilation, groups=conv2duf.groups)
+        pass
+        #second_comp = 
+        # TODO find a way to convolve w with itself with gamma
