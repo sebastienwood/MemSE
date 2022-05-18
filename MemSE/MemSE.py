@@ -80,8 +80,26 @@ class MemSE(nn.Module):
 			SUPPORTED_OPS.get(type(s), NOOP)(s, data)
 			self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
 			self.post_process_gamma(data['gamma'])
+
+		if len(data['mu'].shape) != 2:
+			data['mu'] = data['mu'].view(data['mu'].shape[0], -1)
+		if data['gamma_shape'] is not None:
+			data['gamma'] = torch.zeros(data['gamma_shape'])
+		if len(data['gamma'].shape) != 3:
+			data['gamma'] = data['gamma'].view(data['gamma'].shape[0], data['mu'].shape[1], data['mu'].shape[1])
 			
 		return data['mu'], data['gamma'], data['P_tot']
+
+	def mse_sim(self, x, tar, reps: int = 100):
+		if self.input_bias:
+			x += self.bias[None, :, :, :]
+		self.quant(c_one=False)
+		out = (self.forward_noisy(x).detach() - tar) ** 2
+		for _ in range(reps - 1):
+			out += (self.forward_noisy(x).detach() - tar) ** 2
+		out /= reps
+		self.unquant()
+		return out
 
 	def no_power_forward(self, x):
 		return self.forward(x, False)

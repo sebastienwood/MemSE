@@ -1,6 +1,8 @@
+from attr import has
 from torchvision import transforms, datasets
 from torch.utils import data
 import torch
+import torch.nn as nn
 import copy
 import numpy as np
 
@@ -45,8 +47,9 @@ def get_dataloader(name:str, root='./data', bs=128, workers=2):
     test_loader = data.DataLoader(test_set, batch_size=bs, shuffle=False, num_workers=workers, pin_memory=True)
     return train_loader, train_clean_loader, test_loader, nclasses, input_shape
 
-def get_output_dataset(dataloader, model):
+def get_output_dataset(dataloader, model: nn.Module):
     """Returns a dataloader with targets the output of the `model`. Care about the transforms of your `dataset`! """
+    assert isinstance(model, nn.Module) and (not hasattr(model, '__attached_memquant') or model.__attached_memquant.quanted is False)
     new_targets = []
     with torch.inference_mode():
         for inputs, _ in dataloader:
@@ -54,10 +57,13 @@ def get_output_dataset(dataloader, model):
             new_targets.append(res.cpu().numpy())
     dataset = copy.deepcopy(dataloader.dataset)
     dataset.targets = np.concatenate(new_targets)
+    dataset.__output_dataset = True
     return dataset
 
 def get_output_loader(dataloader, model, shuffle: bool = False):
     dataset = get_output_dataset(dataloader, model)
     bs = dataloader.batch_size
     num_workers = dataloader.num_workers
-    return data.DataLoader(dataset, batch_size=bs, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
+    dloader = data.DataLoader(dataset, batch_size=bs, shuffle=shuffle, num_workers=num_workers, pin_memory=True)
+    dloader.__output_loader = True
+    return dloader

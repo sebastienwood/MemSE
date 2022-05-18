@@ -21,6 +21,7 @@ class MemristorQuant(object):
 				 std_noise:float=1.) -> None:
 		super().__init__()
 		self.model = model
+		model.__attached_memquant = self
 		self.quanted = False
 		self.noised = False
 		

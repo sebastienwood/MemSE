@@ -3,7 +3,7 @@ import torch
 import opt_einsum as oe
 
 from typing import Optional, List
-from .utils import diagonal_replace
+from .utils import diagonal_replace, energy_vec_batched, padded_mu_gamma
 
 
 #@torch.jit.script
@@ -39,38 +39,6 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 		new_gamma = gg
 
 	return new_mu, new_gamma, gamma_shape
-
-
-#@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional[List[int]]=None):
-	batch_len = mu.shape[0]
-	padded_size = [mu.shape[1], mu.shape[2]+padding*2, mu.shape[3]+padding*2]
-
-	pad_mu = torch.nn.functional.pad(mu, ((padding,) * 4))
-	numel_image = pad_mu.shape[1:].numel()
-	mu = torch.reshape(pad_mu, (batch_len,numel_image))
-
-	if gamma_shape is not None:# gamma == 0 store only size
-		gamma_shape = [batch_len,numel_image,numel_image]
-	else:
-		pad_gamma = torch.nn.functional.pad(gamma, ((padding,) * 4 + (0, 0) + (padding,) * 4))
-		gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
-
-	return mu, gamma, gamma_shape
-
-
-#@torch.jit.script
-def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Tensor, new_mu_pos, new_gamma_neg_diag:torch.Tensor, new_mu_neg, r:float, gamma_shape:Optional[List[int]]=None):
-	if gamma_shape is not None:
-		mu_r = oe.contract('i,ij,bj->b', c, torch.abs(G), mu)
-	else:
-		diag_gamma = torch.diagonal(gamma, dim1=1, dim2=2)
-		mu_r = oe.contract('i,ij,bj->b', c, torch.abs(G), diag_gamma+mu)
-
-	#diag_ngp = torch.diagonal(new_gamma_pos_diag, dim1=1, dim2=2)
-	#diag_ngn = torch.diagonal(new_gamma_neg_diag, dim1=1, dim2=2)
-	diags =  (new_gamma_pos_diag + torch.square(new_mu_pos) + new_gamma_neg_diag + torch.square(new_mu_neg)) # (diag_ngp + torch.square(new_mu_pos) + diag_ngn + torch.square(new_mu_neg))
-	return mu_r + oe.contract('i,bi->b',torch.square(c), diags)/r
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
@@ -115,6 +83,10 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 		else:
 			gamma = torch.reshape(gamma, (batch_len,*mu.shape[1:],*mu.shape[1:]))
 	return mu, gamma, P_tot, gamma_shape
+
+
+def k_linear_layer():
+    pass
 
 
 def linear(module, data):

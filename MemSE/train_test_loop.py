@@ -79,14 +79,14 @@ def test(testloader, model, criterion, device=None, batch_stop:int=-1):
 
 
 def test_mse_th(testloader, model: MemSE, device=None, batch_stop: int = -1):
+    assert testloader.__output_loader is True
     mses, pows = [], []
     for batch_idx, (inputs, targets) in enumerate(testloader):
         inputs, targets = inputs.to(device), targets.to(device)
         model.quanter.denoise()
         mu, gamma, p_tot = model(inputs)
         pows.extend(p_tot.cpu().tolist())
-        tar = model.model(inputs)
-        mse = mse_gamma(tar, mu, gamma)
+        mse = mse_gamma(targets, mu, gamma)
         mses.extend(mse.cpu().tolist())
         if batch_stop == batch_idx + 1:
             break
@@ -94,12 +94,13 @@ def test_mse_th(testloader, model: MemSE, device=None, batch_stop: int = -1):
 
 
 def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, trials=100):
+    assert testloader.__output_loader is True
     mses = []
     for batch_idx, (inputs, targets) in enumerate(testloader):
         inputs, targets = inputs.to(device), targets.to(device)
-        out = model.forward_noisy(inputs).detach()
+        out = (model.forward_noisy(inputs).detach() - targets) ** 2
         for _ in range(trials - 1):
-            out += model.forward_noisy(inputs).detach()
+            out += (model.forward_noisy(inputs).detach() - targets) ** 2
         out /= trials
         mses.extend(out.cpu().tolist())
         if batch_stop == batch_idx + 1:

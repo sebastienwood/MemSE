@@ -1,13 +1,7 @@
-import pytest
 import numpy as np
 import torch
-import torch.nn as nn
 import timeit
-
-from MemSE.nn.Linear import linear_layer_vec_batched
-from MemSE.keops_mse_functions import k_linear_layer
-from MemSE.network_manipulations import build_sequential_linear, record_shapes
-from MemSE.nn import Conv2DUF
+from MemSE.nn.Linear import linear_layer_vec_batched, k_linear_layer
 
 use_cuda = False
 
@@ -38,19 +32,3 @@ def test_new_method():
     res = k_linear_layer(mu_t, ga_t, G_t, sigma_c, r)
     assert torch.allclose(ref, res)
     print(timeit.timeit('k_linear_layer(mu_t, ga_t, G_t, sigma_c, r)'))
-
-def test_memristor_unfolded():
-    inp = torch.rand(1,3,10,12)
-    conv = nn.Conv2d(3,3,2)
-    y = record_shapes(conv, inp)
-    conv2duf = Conv2DUF(conv, inp.shape, conv.__output_shape)
-    y_hat = conv2duf(inp)
-    assert torch.allclose(y, y_hat)
-
-def test_memristor_large():
-    inp = torch.rand(1,3,10,12)
-    conv = nn.Conv2d(3,3,2)
-    y = record_shapes(conv, inp.shape)
-    conv2duf = build_sequential_linear(conv)
-    y_hat = conv2duf(inp)
-    assert torch.allclose(y, y_hat)
