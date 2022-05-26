@@ -80,6 +80,7 @@ class LambdaLayer(nn.Module):
 
 @torch.no_grad()
 def build_sequential_linear(conv):
+    assert conv.bias is None, 'Do not support bias at the moment'
     current_input_shape = conv.__input_shape
     current_output_shape = conv.__output_shape
     rand_x = torch.rand(current_input_shape)
@@ -96,8 +97,10 @@ def build_sequential_linear(conv):
     )
     rand_y_repl = seq(rand_x)
     print(rand_y.shape)
+    print(rand_y)
     print('*'*15)
     print(rand_y_repl.shape)
+    print(rand_y_repl)
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
@@ -155,7 +158,7 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     x = x[None, :, :, :]
 
     y = record_shapes(model, x)
-    
+
     replace_op(model, op)
     if verbose:
         print("==> converted Conv2d to Linear")

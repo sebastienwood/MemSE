@@ -12,6 +12,7 @@ class Conv2DUF(nn.Module):
 		self.output_shape = output_shape
 		#exemplar = self.unfold_input(torch.rand(input_shape))
 		self.original_weight = conv.weight.detach().clone()
+		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
 		#self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
 		self.bias = conv.bias.detach().clone()
 
@@ -23,10 +24,6 @@ class Conv2DUF(nn.Module):
 		if self.bias is not None:
 			out += self.bias[:, None, None]
 		return out
-
-	@property
-	def weight(self):
-		return self.original_weight.view(self.c.weight.size(0), -1).t()#.unsqueeze_(0)
 
 	@property
 	def padding(self):
@@ -70,16 +67,16 @@ class Conv2DUF(nn.Module):
 		ct = torch.ones(conv2duf.weight.shape[0], device=mu.device, dtype=mu.dtype) * conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
 
 		if memse_dict['compute_power']:
-			Gpos = torch.clip(conv2duf.weight, min=0)
-			Gneg = torch.clip(-conv2duf.weight, min=0)
-			new_mu_pos, new_gamma_pos, _ = Conv2DUF.mse_var(mu, gamma, Gpos, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
-			new_mu_neg, new_gamma_neg, _ = Conv2DUF.mse_var(mu, gamma, Gneg, sigma_p, r, gamma_shape=gamma_shape, gamma_only_diag=True)
+			Gpos = torch.clip(conv2duf.original_weight, min=0)
+			Gneg = torch.clip(-conv2duf.original_weight, min=0)
+			new_mu_pos, new_gamma_pos, _ = Conv2DUF.mse_var(conv2duf, memse_dict, Gpos)
+			new_mu_neg, new_gamma_neg, _ = Conv2DUF.mse_var(conv2duf, memse_dict, Gneg)
 
-			P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, r, gamma_shape=gamma_shape)
+			P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
 		else:
 			P_tot = 0.
 
-		mu, gamma, gamma_shape = Conv2DUF.mse_var(mu, gamma, conv2duf.weight, sigma_c, r, gamma_shape=gamma_shape)
+		mu, gamma, gamma_shape = Conv2DUF.mse_var(conv2duf, memse_dict, conv2duf.original_weight)
 
 		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
 		if gamma_shape is not None:
@@ -94,15 +91,15 @@ class Conv2DUF(nn.Module):
 		memse_dict['gamma_shape'] = gamma_shape
 
 	@staticmethod
-	def mse_var(conv2duf: Conv2DUF, memse_dict, c):
+	def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
 		gamma = memse_dict['gamma']
 		gamma_diag = gamma_to_diag(gamma)
 		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
-		first_comp = nn.functional.conv2d(first_comp, torch.ones_like(conv2duf.original_weight), **conv2duf.conv_property_dict)
-		conv_sq = conv2duf.original_weight ** 2
+		first_comp = nn.functional.conv2d(first_comp, torch.ones_like(weights), **conv2duf.conv_property_dict)
+		conv_sq = weights ** 2
 		first_comp += nn.functional.conv2d(gamma_diag, conv_sq, **conv2duf.conv_property_dict)
 
 		
-		gamma = double_conv(gamma, conv2duf.original_weight, **conv2duf.conv_property_dict)
-		return mu, gamma, gamma_shape
+		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+		return mu, gamma, None
