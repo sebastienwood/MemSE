@@ -14,7 +14,7 @@ class Conv2DUF(nn.Module):
 		self.original_weight = conv.weight.detach().clone()
 		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
 		#self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
-		self.bias = conv.bias.detach().clone()
+		self.bias = conv.bias.detach().clone() if conv.bias is not None else None
 
 	def forward(self, x):
 		inp_unf = self.unfold_input(x)
@@ -69,14 +69,14 @@ class Conv2DUF(nn.Module):
 		if memse_dict['compute_power']:
 			Gpos = torch.clip(conv2duf.original_weight, min=0)
 			Gneg = torch.clip(-conv2duf.original_weight, min=0)
-			new_mu_pos, new_gamma_pos, _ = Conv2DUF.mse_var(conv2duf, memse_dict, Gpos)
-			new_mu_neg, new_gamma_neg, _ = Conv2DUF.mse_var(conv2duf, memse_dict, Gneg)
+			new_mu_pos, new_gamma_pos, _ = Conv2DUF.mse_var(conv2duf, memse_dict, ct, Gpos)
+			new_mu_neg, new_gamma_neg, _ = Conv2DUF.mse_var(conv2duf, memse_dict, ct, Gneg)
 
 			P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
 		else:
 			P_tot = 0.
 
-		mu, gamma, gamma_shape = Conv2DUF.mse_var(conv2duf, memse_dict, conv2duf.original_weight)
+		mu, gamma, gamma_shape = Conv2DUF.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
 
 		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
 		if gamma_shape is not None:
