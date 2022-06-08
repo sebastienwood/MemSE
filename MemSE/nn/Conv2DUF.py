@@ -20,7 +20,7 @@ class Conv2DUF(nn.Module):
 		inp_unf = self.unfold_input(x)
 		#out_unf = torch.einsum('bfp,pfc->bcp', inp_unf, self.weight)
 		out_unf = inp_unf.transpose(1, 2).matmul(self.weight).transpose(1, 2)
-		out = out_unf.view(*self.output_shape)
+		out = out_unf.view(x.shape[0], *self.output_shape)
 		if self.bias is not None:
 			out += self.bias[:, None, None]
 		return out
@@ -35,7 +35,7 @@ class Conv2DUF(nn.Module):
 
 	@property
 	def groups(self):
-		return self.c.groups
+		return int(self.c.groups)
 
 	@property
 	def stride(self):
@@ -64,7 +64,7 @@ class Conv2DUF(nn.Module):
 		l = memse_dict['mu'].shape[2]
 		mu, gamma, gamma_shape = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=memse_dict['gamma_shape'])
 		# TODO don't need these if using convolutions all the way (no need for prepad + reshape)
-		ct = torch.ones(conv2duf.weight.shape[0], device=mu.device, dtype=mu.dtype) * conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
+		ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax # Only one column at most (vector of weights)
 
 		if memse_dict['compute_power']:
 			Gpos = torch.clip(conv2duf.original_weight, min=0)
@@ -93,12 +93,13 @@ class Conv2DUF(nn.Module):
 	@staticmethod
 	def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
-		gamma = memse_dict['gamma']
+		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
+
 		gamma_diag = gamma_to_diag(gamma)
 		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
-		first_comp = nn.functional.conv2d(first_comp, torch.ones_like(weights), **conv2duf.conv_property_dict)
+		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
 		conv_sq = weights ** 2
-		first_comp += nn.functional.conv2d(gamma_diag, conv_sq, **conv2duf.conv_property_dict)
+		first_comp += nn.functional.conv2d(input=gamma_diag, weight=conv_sq, bias=None, **conv2duf.conv_property_dict)
 
 		
 		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)

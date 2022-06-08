@@ -80,7 +80,11 @@ def double_conv(tensor, weight, stride, padding, dilation, groups):
 
 	nice_view = tensor.reshape(bs, -1, img_shape[1], img_shape[2])
 	nc_first = nice_view.shape[1]
-	first_res = torch.nn.functional.conv2d(nice_view, weight, stride=stride, padding=padding, dilation=dilation, groups=nc_first / (weight.shape[1] * groups))
+	print(img_shape)
+	print(nc_first)
+	print(groups)
+	print(weight.shape)
+	first_res = torch.nn.functional.conv2d(input=nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=squeeze_group(nc_first, weight.shape[1], groups))
 
 	first_res_shape = first_res.shape
 	nice_view_res = first_res.view(bs, img_shape[0], img_shape[1], img_shape[2], nc, first_res_shape[2], first_res_shape[3])
@@ -88,7 +92,7 @@ def double_conv(tensor, weight, stride, padding, dilation, groups):
 	permuted = nice_view_res.permute(0, 4, 5, 6, 1, 2, 3)
 	another_nice_view = permuted.reshape(bs, -1, img_shape[1], img_shape[2])
 	nc_second = another_nice_view.shape[1]
-	second_res = torch.nn.functional.conv2d(another_nice_view, weight, stride=stride, padding=padding, dilation=dilation, groups=nc_second / (weight.shape[1] * groups))
+	second_res = torch.nn.functional.conv2d(input=another_nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=int(nc_second / (weight.shape[1] * groups)))
 
 	second_res_shape = second_res.shape
 	anv_res = second_res.view(bs, nc, first_res_shape[2], first_res_shape[3], nc, second_res_shape[2], second_res_shape[3])
@@ -104,3 +108,11 @@ def gamma_to_diag(tensor, flatten=False):
 	view = torch.reshape(tensor, (bs,numel_image,numel_image))
 	diag = torch.diagonal(view, dim1=1, dim2=2)
 	return diag.reshape((bs,*img_shape)) if not flatten else diag
+
+
+def squeeze_group(nc, win_nc, groups):
+	'''Given number of channels, size of weights input channel and nb of groups of unsqueezed conv, return number of groups for squeezed conv'''
+	print(nc)
+	print(win_nc)
+	print(groups)
+	return int(nc / win_nc)
