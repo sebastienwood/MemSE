@@ -26,49 +26,55 @@ MODELS_FUSION = {
 }
 
 
-#from https://github.com/pytorch/pytorch/issues/26781#issuecomment-821054668
-def convmatrix2d(kernel, image_shape, padding=None):
+#adapted from https://github.com/pytorch/pytorch/issues/26781#issuecomment-821054668
+def convmatrix2d(kernel, image_shape, padding, stride):
     # kernel: (out_channels, in_channels, kernel_height, kernel_width, ...)
     # image: (in_channels, image_height, image_width, ...)
 
-    if padding:
-        assert padding[0] == padding[1]
-        padding = padding[0]
-        old_shape = image_shape
-        pads = (padding, padding, padding, padding)
-        image_shape = (image_shape[0], image_shape[1] + padding*2, image_shape[2]
-                       + padding*2)
-    else:
-        image_shape = tuple(image_shape)
+    assert padding[0] == padding[1]
+    assert stride[0] == stride[1]
+    
+    padding = padding[0]
+    old_shape = image_shape
+    pads = (padding, padding, padding, padding)
+    image_shape = (image_shape[0], image_shape[1] + padding*2, image_shape[2]
+                   + padding*2)
 
     assert image_shape[0] == kernel.shape[1]
     assert len(image_shape[1:]) == len(kernel.shape[2:])
+    
     result_dims = torch.tensor(image_shape[1:]) - torch.tensor(kernel.shape[2:]) + 1
     m = torch.zeros((
         kernel.shape[0],
         *result_dims,
         *image_shape
     ))
-    for i in range(m.shape[1]):
-        for j in range(m.shape[2]):
+
+    for i in range(0, m.shape[1], stride[0]):
+        for j in range(0, m.shape[2], stride[0]):
             m[:,i,j,:,i:i+kernel.shape[2],j:j+kernel.shape[3]] = kernel
+    
+    if stride[0] > 1:
+        result_dims_stride = ((torch.tensor(image_shape[1:]) - torch.tensor(kernel.shape[2:]))//stride[0]) + 1
+        m_stride = torch.zeros((
+            kernel.shape[0],
+            *result_dims_stride,
+            *image_shape
+        ))
+        i_tmp = 0
+        for i in range(0, result_dims[0]):
+            j_tmp = 0
+            if i % stride[0] != 0:
+                continue
+            for j in range(0, result_dims[1]):
+                if j % stride[0] == 0:
+                    m_stride[:,i_tmp,j_tmp,:,:,:] = m[:,i,j,:,:,:]
+                    j_tmp += 1
+            i_tmp += 1
+ 
+        return m_stride.flatten(0, len(kernel.shape[2:])).flatten(1)
+
     return m.flatten(0, len(kernel.shape[2:])).flatten(1)
-
-    # Handle zero padding. Effectively, the zeros from padding do not
-    # contribute to convolution output as the product at those elements is zero.
-    # Hence the columns of the conv mat that are at the indices where the
-    # padded flattened image would have zeros can be ignored. The number of
-    # rows on the other hand must not be altered (with padding the output must
-    # be larger than without). So..
-
-    # We'll handle this the easy way and create a mask that accomplishes the
-    # indexing
-    if padding:
-        mask = torch.nn.functional.pad(torch.ones(old_shape), pads).flatten()
-        mask = mask.bool()
-        m = m[:, mask]
-
-    return m
 
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
@@ -85,7 +91,7 @@ def build_sequential_linear(conv):
     current_output_shape = conv.__output_shape
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
-    conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding)
+    conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding, conv.stride)
     print(conv_fced.shape)
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
     linear.weight.data = conv_fced
