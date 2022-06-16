@@ -78,27 +78,25 @@ def double_conv(tensor, weight, stride, padding, dilation, groups):
 	nc = tensor.shape[1]
 	img_shape = tensor.shape[1:4]
 
-	nice_view = tensor.reshape(bs, -1, img_shape[1], img_shape[2])
+	nice_view = tensor.reshape(-1, img_shape[0], img_shape[1], img_shape[2])
 	nc_first = nice_view.shape[1]
-	print(img_shape)
-	print(nc_first)
-	print(groups)
-	print(weight.shape)
-	first_res = torch.nn.functional.conv2d(input=nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=squeeze_group(nc_first, weight.shape[1], groups))
+	first_res = torch.nn.functional.conv2d(input=nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
 	first_res_shape = first_res.shape
-	nice_view_res = first_res.view(bs, img_shape[0], img_shape[1], img_shape[2], nc, first_res_shape[2], first_res_shape[3])
+	nice_view_res = first_res.view(bs, img_shape[0], img_shape[1], img_shape[2], first_res_shape[1], first_res_shape[2], first_res_shape[3])
 
 	permuted = nice_view_res.permute(0, 4, 5, 6, 1, 2, 3)
-	another_nice_view = permuted.reshape(bs, -1, img_shape[1], img_shape[2])
+	another_nice_view = permuted.reshape(-1, img_shape[0], img_shape[1], img_shape[2])
 	nc_second = another_nice_view.shape[1]
-	second_res = torch.nn.functional.conv2d(input=another_nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=int(nc_second / (weight.shape[1] * groups)))
+	second_res = torch.nn.functional.conv2d(input=another_nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
 	second_res_shape = second_res.shape
-	anv_res = second_res.view(bs, nc, first_res_shape[2], first_res_shape[3], nc, second_res_shape[2], second_res_shape[3])
+	anv_res = second_res.view(bs, first_res_shape[1], first_res_shape[2], first_res_shape[3], second_res_shape[1], second_res_shape[2], second_res_shape[3])
 
 	return anv_res.permute(0, 4, 5, 6, 1, 2, 3)
 
+def conv7d(input, weight, stride, padding, dilation, groups):
+	pass
 
 def gamma_to_diag(tensor, flatten=False):
 	bs = tensor.shape[0]
@@ -110,9 +108,12 @@ def gamma_to_diag(tensor, flatten=False):
 	return diag.reshape((bs,*img_shape)) if not flatten else diag
 
 
+def gamma_add_diag(tensor, added):
+	diag = gamma_to_diag(tensor)
+	diag += added
+
+
 def squeeze_group(nc, win_nc, groups):
 	'''Given number of channels, size of weights input channel and nb of groups of unsqueezed conv, return number of groups for squeezed conv'''
-	print(nc)
-	print(win_nc)
-	print(groups)
+	print(nc/win_nc)
 	return int(nc / win_nc)

@@ -82,15 +82,15 @@ class MemSE(nn.Module):
 			self.post_process_gamma(data['gamma'])
 
 		if len(data['mu'].shape) != 2:
-			data['mu'] = data['mu'].view(data['mu'].shape[0], -1)
+			data['mu'] = data['mu'].reshape(data['mu'].shape[0], -1)
 		if data['gamma_shape'] is not None:
 			data['gamma'] = torch.zeros(data['gamma_shape'])
 		if len(data['gamma'].shape) != 3:
-			data['gamma'] = data['gamma'].view(data['gamma'].shape[0], data['mu'].shape[1], data['mu'].shape[1])
+			data['gamma'] = data['gamma'].reshape(data['gamma'].shape[0], data['mu'].shape[1], data['mu'].shape[1])
 			
 		return data['mu'], data['gamma'], data['P_tot']
 
-	def mse_sim(self, x, tar, reps: int = 100):
+	def mse_sim(self, x, tar, reps: int = 1000):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 		self.quant(c_one=False)
@@ -99,7 +99,7 @@ class MemSE(nn.Module):
 			out += (self.forward_noisy(x).detach() - tar) ** 2
 		out /= reps
 		self.unquant()
-		return out
+		return out.flatten(start_dim=1)
 
 	def no_power_forward(self, x):
 		return self.forward(x, False)

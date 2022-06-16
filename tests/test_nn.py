@@ -16,8 +16,11 @@ def test_conv2duf():
     quanter = MemristorQuant(conv2duf)
     memse = MemSE(conv2duf, quanter, input_bias=False)
     memse.quant()
-    mse_th = memse(inp)
+    mu, gamma, p_tot = memse.no_power_forward(inp)
+    mse_th = mse_gamma(out, mu, gamma)
     mse_sim = memse.mse_sim(inp, out)
+    print(mse_th.mean())
+    print(mse_sim.mean())
     assert torch.allclose(mse_th, mse_sim)
 
 
@@ -29,4 +32,6 @@ def test_conv2d():
     mse_th_mu, mse_th_gamma, p_tot = memse(inp)
     mse_th = mse_gamma(out, mse_th_mu, mse_th_gamma)
     mse_sim = memse.mse_sim(inp, out)
+    print(mse_th.mean())
+    print(mse_sim.mean())
     assert torch.allclose(mse_th, mse_sim)

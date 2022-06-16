@@ -1,14 +1,21 @@
 from __future__ import annotations
+from numpy import diag
 import torch
 import torch.nn as nn
 
-from .utils import double_conv, energy_vec_batched, gamma_to_diag, padded_mu_gamma
+from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
 class Conv2DUF(nn.Module):
 	def __init__(self, conv, input_shape, output_shape):
 		super().__init__()
 		assert len(output_shape) == 3, f'chw or cwh with no batch dim'
 		self.c = conv
+
+		#g = 2
+		#t = torch.nn.Conv2d(conv.weight.shape[1]*g, conv.weight.shape[0]*g, conv.weight.shape[2], conv.stride, conv.padding, conv.dilation, groups=g, bias=False)
+		#print(conv.weight.shape)
+		#print(t.weight.shape)
+
 		self.output_shape = output_shape
 		#exemplar = self.unfold_input(torch.rand(input_shape))
 		self.original_weight = conv.weight.detach().clone()
@@ -62,8 +69,9 @@ class Conv2DUF(nn.Module):
 		batch_len = memse_dict['mu'].shape[0]
 		image_shape = memse_dict['mu'].shape[1:]
 		l = memse_dict['mu'].shape[2]
-		mu, gamma, gamma_shape = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=memse_dict['gamma_shape'])
+		#mu, gamma, gamma_shape = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=memse_dict['gamma_shape'])
 		# TODO don't need these if using convolutions all the way (no need for prepad + reshape)
+		mu, gamma, gamma_shape = memse_dict['mu'], memse_dict['gamma'], memse_dict['gamma_shape']
 		ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax # Only one column at most (vector of weights)
 
 		if memse_dict['compute_power']:
@@ -78,11 +86,12 @@ class Conv2DUF(nn.Module):
 
 		mu, gamma, gamma_shape = Conv2DUF.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
 
-		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
-		if gamma_shape is not None:
-			gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
-		else:
-			gamma = torch.reshape(gamma, (batch_len,*mu.shape[1:],*mu.shape[1:]))
+		#mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
+
+		#if gamma_shape is not None:
+		#	gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
+		#else:
+		#	gamma = torch.reshape(gamma, (batch_len,*mu.shape[1:],*mu.shape[1:]))
 		
 		memse_dict['P_tot'] += P_tot
 		memse_dict['current_type'] = 'Conv2DUF'
@@ -100,7 +109,8 @@ class Conv2DUF(nn.Module):
 		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
 		conv_sq = weights ** 2
 		first_comp += nn.functional.conv2d(input=gamma_diag, weight=conv_sq, bias=None, **conv2duf.conv_property_dict)
-
 		
 		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+		gamma_add_diag(gamma, first_comp)
+		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
