@@ -61,6 +61,7 @@ class MemSE(nn.Module):
 		return self.quanter.std_noise
 
 	def forward(self, x, compute_power: bool = True, output_handle=None):
+		self.quant()
 		assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
@@ -88,6 +89,7 @@ class MemSE(nn.Module):
 		if len(data['gamma'].shape) != 3:
 			data['gamma'] = data['gamma'].reshape(data['gamma'].shape[0], data['mu'].shape[1], data['mu'].shape[1])
 			
+		self.unquant()
 		return data['mu'], data['gamma'], data['P_tot']
 
 	def mse_sim(self, x, tar, reps: int = 1000):
@@ -95,6 +97,8 @@ class MemSE(nn.Module):
 			x += self.bias[None, :, :, :]
 		self.quant(c_one=False)
 		out = (self.forward_noisy(x).detach() - tar) ** 2
+		print(self.forward_noisy(x))
+		print(tar)
 		for _ in range(reps - 1):
 			out += (self.forward_noisy(x).detach() - tar) ** 2
 		out /= reps
