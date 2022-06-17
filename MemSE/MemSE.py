@@ -107,7 +107,7 @@ class MemSE(nn.Module):
 	def no_power_forward(self, x):
 		return self.forward(x, False)
 
-	def mse_forward(self, x, reps: int = 100):
+	def mse_forward(self, x, reps: int = 100, compute_power: bool = True):
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 		
@@ -133,12 +133,13 @@ class MemSE(nn.Module):
 		means = {'sim': {}, 'us': {}}
 		varis = {'sim': {}, 'us': {}}
 
-		data = {
+		data = { # TODO this could be managed in a distinct function
 			'mu': x,
 			'gamma_shape': [*x.shape, *x.shape[1:]],
 			'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
 			'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
 			'current_type': None,
+			'compute_power': compute_power,
 			'taylor_order': self.taylor_order,
 			'sigma': self.sigma,
 			'r': self.r
@@ -161,9 +162,9 @@ class MemSE(nn.Module):
 				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
 				means['us'].get(type(s)).update({idx: data['mu'].mean().detach().cpu().numpy()})
 				if len(original_output.shape) > 2:
-					original_output = original_output.view(original_output.shape[0], -1)
+					original_output = original_output.reshape(original_output.shape[0], -1)
 				gamma_viewed = original_output.shape + original_output.shape[1:]
-				se_us = mse_gamma(original_output, data['mu'].view_as(original_output), data['gamma'].view(gamma_viewed) if data['gamma_shape'] is None else torch.zeros(gamma_viewed, device=x))
+				se_us = mse_gamma(original_output, data['mu'].reshape_as(original_output), data['gamma'].reshape(gamma_viewed) if data['gamma_shape'] is None else torch.zeros(gamma_viewed, device=x))
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
