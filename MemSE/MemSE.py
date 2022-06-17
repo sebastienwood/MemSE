@@ -1,4 +1,5 @@
 import math
+from attr import has
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -97,8 +98,6 @@ class MemSE(nn.Module):
 			x += self.bias[None, :, :, :]
 		self.quant(c_one=False)
 		out = (self.forward_noisy(x).detach() - tar) ** 2
-		print(self.forward_noisy(x))
-		print(tar)
 		for _ in range(reps - 1):
 			out += (self.forward_noisy(x).detach() - tar) ** 2
 		out /= reps

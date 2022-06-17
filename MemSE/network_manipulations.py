@@ -132,7 +132,10 @@ def replace_op(model, fx, old_module=torch.nn.Conv2d):
         if type(module) in old_module:
             new_fc = fx(module)
             new_modules[name] = new_fc
+    if len(list(model.modules())) == 1:
+        return new_modules.popitem()[1]
     [recursive_setattr(model, n, fc) for n, fc in new_modules.items()]
+    return model
 
 
 @torch.no_grad()
@@ -165,7 +168,7 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
 
     y = record_shapes(model, x)
 
-    replace_op(model, op)
+    model = replace_op(model, op)
     if verbose:
         print("==> converted Conv2d to Linear")
         print(model)
