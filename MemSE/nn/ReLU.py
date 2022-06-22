@@ -1,12 +1,15 @@
 import math
 import torch
 
+from MemSE.nn.utils import diagonal_replace
+
 
 def relu(module, data):
     mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
     gamma_view = gamma.view(gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
     sigma_2 = gamma_view.diagonal(dim1=1, dim2=2)
     sigma_2 = sigma_2.view(*gamma.shape[:4])
+    assert sigma_2.numel() == mu.numel()
 
     DENOM = math.sqrt(2 * math.pi)
     SQRT_2 = math.sqrt(2)
@@ -22,8 +25,9 @@ def relu(module, data):
     first_g = mu * first_m
     second_g = (torch.square(sigma_2)+torch.square(mu)) * second_m
     gamma_p = first_g + second_g
+    ga_r = diagonal_replace(gamma_view, gamma_p.view(*gamma_view.diagonal(dim1=1, dim2=2).shape)).view(*gamma.shape)
 
     data['current_type'] = 'ReLU'
     data['mu'] = mu_p
-    data['gamma'] = gamma_p
+    data['gamma'] = ga_r
     data['gamma_shape'] = gamma_shape
