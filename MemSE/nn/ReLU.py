@@ -24,6 +24,6 @@ def relu(module, data):
     gamma_p = first_g + second_g
 
     data['current_type'] = 'ReLU'
-	data['mu'] = mu_p
-	data['gamma'] = gamma_p
-	data['gamma_shape'] = gamma_shape
+    data['mu'] = mu_p
+    data['gamma'] = gamma_p
+    data['gamma_shape'] = gamma_shape
