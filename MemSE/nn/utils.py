@@ -95,9 +95,6 @@ def double_conv(tensor, weight, stride, padding, dilation, groups):
 
 	return anv_res.permute(0, 4, 5, 6, 1, 2, 3)
 
-def conv7d(input, weight, stride, padding, dilation, groups):
-	pass
-
 def gamma_to_diag(tensor, flatten=False):
 	bs = tensor.shape[0]
 	nc = tensor.shape[1]

@@ -13,7 +13,6 @@ class WMAX_MODE(enum.Enum):
 
 UNSUPPORTED_OPS = [
 	nn.BatchNorm2d,
-	nn.ReLU,
 	nn.GELU,
 ]
 
@@ -21,5 +20,6 @@ SUPPORTED_OPS = {
 	nn.Linear: nnM.linear,
 	nn.Softplus: nnM.softplus,
 	nn.AvgPool2d: nnM.avgPool2d,
-	nnM.Conv2DUF: nnM.Conv2DUF.memse
+	nnM.Conv2DUF: nnM.Conv2DUF.memse,
+	nn.ReLU: nnM.ReLU,
 }

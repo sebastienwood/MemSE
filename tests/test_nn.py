@@ -18,7 +18,7 @@ def test_conv2duf():
     mu, gamma, p_tot = memse.no_power_forward(inp)
     mse_th = mse_gamma(out, mu, gamma)
     mse_sim = memse.mse_sim(inp, out)
-    mses, means, varis = memse.mse_forward(inp, compute_power=False)
+    mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e5)
     print(means)
     print(varis)
     print('----------')

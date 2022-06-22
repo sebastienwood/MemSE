@@ -107,7 +107,8 @@ class MemSE(nn.Module):
 	def no_power_forward(self, x):
 		return self.forward(x, False)
 
-	def mse_forward(self, x, reps: int = 100, compute_power: bool = True):
+	def mse_forward(self, x, reps: int = 1000, compute_power: bool = True):
+		reps = int(reps)
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 		
@@ -168,7 +169,6 @@ class MemSE(nn.Module):
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
-
 		return mses, means, varis
 
 
