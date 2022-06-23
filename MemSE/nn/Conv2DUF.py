@@ -2,6 +2,7 @@ from __future__ import annotations
 from numpy import diag
 import torch
 import torch.nn as nn
+import numpy as np
 
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
@@ -107,10 +108,32 @@ class Conv2DUF(nn.Module):
 		gamma_diag = gamma_to_diag(gamma)
 		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
 		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
-		conv_sq = weights ** 2
-		first_comp += nn.functional.conv2d(input=gamma_diag, weight=conv_sq, bias=None, **conv2duf.conv_property_dict)
+		first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 		
-		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)	
 		gamma_add_diag(gamma, first_comp)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
+
+	@staticmethod
+	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
+		'''A reliable but slow version of mse_var'''
+		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
+		gamma = gamma.cpu().numpy()
+		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
+		gamma_res = np.ndarray(mu.shape)
+		r_2 = memse_dict['r'] ** 2
+		ratio = memse_dict['sigma'] ** 2 / c ** 2
+
+		for bi in gamma.shape[0]:
+			for c0 in gamma.shape[1]:
+				for i0 in gamma.shape[2]:
+					for j0 in gamma.shape[3]:
+						# DIAGONALE == VAR
+						gamma_res[bi, c0, i0, j0, c0, i0, j0] = 0.
+						for c0p in gamma.shape[4]:
+							for i0p in gamma.shape[5]:
+								for j0p in gamma.shape[6]:
+									if c0p != c0 or i0p != i0 or j0p != j0:
+										# le truc rigolo là
+										print('hihi')

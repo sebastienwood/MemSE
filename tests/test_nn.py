@@ -23,12 +23,12 @@ def get_mses(memse):
 
 def test_conv2duf():
     conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
-    quanter = MemristorQuant(conv2duf)
+    quanter = MemristorQuant(conv2duf, std_noise=0.1)
     memse = MemSE(conv2duf, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
     mse_th = mse_gamma(out, mu, gamma)
     mse_sim = memse.mse_sim(inp, out)
-    mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e5)
+    mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
     print(means)
     print(varis)
     print('----------')
