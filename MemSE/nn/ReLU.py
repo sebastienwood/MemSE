@@ -34,8 +34,9 @@ def relu(module, data):
     data['gamma_shape'] = gamma_shape
 
 
-class ReLU(MemSEAct):
+class ReLU_(MemSEAct):
     __type__ = 'ReLU'
+    @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
         DENOM = math.sqrt(2 * math.pi)
         SQRT_2 = math.sqrt(2)
@@ -49,5 +50,9 @@ class ReLU(MemSEAct):
         gamma_p = first_g + second_g - mu_p ** 2
         return mu_p, gamma_p
 
+    @classmethod
     def derivatives(cls, module, data, mu):
         return {1: torch.hardtanh(torch.relu(mu), max_val=0.)}
+
+
+ReLU = ReLU_()

@@ -114,10 +114,11 @@ def softplus(module, data):
 	data['gamma_shape'] = gamma_shape
 
 
-class Softplus(MemSEAct):
+class Softplus_(MemSEAct):
 	__type__ = 'Softplus'
 	__min_taylor__ = 2
 	__max_taylor__ = 6
+	@staticmethod
 	def main(module, data, mu, sigma_2, derivatives):
 		degree_taylor = data['taylor_order']
 		mu_r = torch.nn.functional.softplus(mu, beta=module.beta, threshold=module.threshold)
@@ -149,3 +150,6 @@ class Softplus(MemSEAct):
 	def gamma_extra_updates(cls, module, data, gamma, derivatives):
 		second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', derivatives[1], derivatives[1])
 		gamma -= oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, data['gamma'], data['gamma'])
+
+
+Softplus = Softplus_()
