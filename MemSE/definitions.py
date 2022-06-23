@@ -18,7 +18,7 @@ UNSUPPORTED_OPS = [
 
 SUPPORTED_OPS = {
 	nn.Linear: nnM.linear,
-	nn.Softplus: nnM.softplus,
+	nn.Softplus: nnM.Softplus,
 	nn.AvgPool2d: nnM.avgPool2d,
 	nnM.Conv2DUF: nnM.Conv2DUF.memse,
 	nn.ReLU: nnM.ReLU,

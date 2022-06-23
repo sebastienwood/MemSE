@@ -4,6 +4,8 @@ import numpy as np
 import opt_einsum as oe
 
 from typing import Optional, List
+
+from MemSE.nn.MemSEAct import MemSEAct
 from .utils import diagonal_replace
 
 def sigmoid_coefs(order:int):
@@ -110,3 +112,40 @@ def softplus(module, data):
 	data['mu'] = x
 	data['gamma'] = gamma
 	data['gamma_shape'] = gamma_shape
+
+
+class Softplus(MemSEAct):
+	__type__ = 'Softplus'
+	__min_taylor__ = 2
+	__max_taylor__ = 6
+	def main(module, data, mu, sigma_2, derivatives):
+		degree_taylor = data['taylor_order']
+		mu_r = torch.nn.functional.softplus(mu, beta=module.beta, threshold=module.threshold)
+
+		if degree_taylor >= 2:
+			mu_r += 0.5 * oe.contract('bcij,bcij->bcij', derivatives[2], sigma_2)
+			gg = oe.contract('bcij,bcij->bcij', derivatives[1] ** 2, sigma_2)
+		else:
+			raise ValueError('Degree taylor for Softplus should be >= 2')
+		if degree_taylor >= 4:
+			mu_r += 0.125 * oe.contract('bcij,bcij->bcij', derivatives[4], sigma_2 ** 2)
+
+			fourth_comp = 2 * (derivatives[2] / 2) ** 2 + oe.contract('bcij,bcij->bcij', derivatives[1], derivatives[3])
+			gg += oe.contract('bcij,bcij->bcij', fourth_comp, sigma_2 ** 2)
+		if degree_taylor >= 6:
+			mu_r += (15/720) * oe.contract('bcij,bcij->bcij', derivatives[6], sigma_2 ** 3)
+
+			six_comp = (derivatives[3] / 6) ** 2 * 15
+			six_comp += (1/4) * oe.contract('bcij,bcij->bcij', derivatives[1], derivatives[5])
+			six_comp += (1/2) * oe.contract('bcij,bcij->bcij', derivatives[2], derivatives[4])
+			gg += oe.contract('bcij,bcij->bcij', six_comp, sigma_2 ** 3)
+		return mu_r, gg
+
+	@classmethod
+	def derivatives(cls, module, data, mu):
+		return dd_softplus(mu, max(min(cls.__max_taylor__, data['taylor_order']), cls.__min_taylor__))[2]
+
+	@classmethod
+	def gamma_extra_updates(cls, module, data, gamma, derivatives):
+		second_comp = 0.25 * oe.contract('bcij,bklm->bcijklm', derivatives[1], derivatives[1])
+		gamma -= oe.contract('bcijklm,bcijcij,bklmklm->bcijklm', second_comp, data['gamma'], data['gamma'])
