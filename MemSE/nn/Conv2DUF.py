@@ -143,15 +143,18 @@ class Conv2DUF(nn.Module):
 													for ij in range(w.shape[2]):
 														for jj in range(w.shape[3]):
 															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
-									if c0p != c0 or i0p != i0 or j0p != j0:
-										# le truc rigolo là
-										print('hihi')
+									
 						# DIAGONALE == VAR
 						for ci in range(w.shape[1]):
 							for ii in range(w.shape[2]):
 								for ji in range(w.shape[3]):
 									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
-									gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
+									gamma_res[bi, c0, i0, j0, c0, i0, j0] = ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
+									for cj in range(w.shape[1]):
+										for ij in range(w.shape[2]):
+											for jj in range(w.shape[3]):
+												if c0p != c0 or i0p != i0 or j0p != j0:
+													gamma_res[bi, c0, i0, j0, c0, i0, j0] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
 
 									
 		gamma_res *= r_2
