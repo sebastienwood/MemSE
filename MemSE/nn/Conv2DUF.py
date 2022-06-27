@@ -119,12 +119,11 @@ class Conv2DUF(nn.Module):
 	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
 		'''A reliable but slow version of mse_var'''
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
-		mu = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
-		_, gamma, _ = padded_mu_gamma(mu, memse_dict['gamma'], gamma_shape=None)
-		gamma = gamma.cpu().numpy()
+		mu_res = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
+		mu, gamma, _ = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=None)
+		mu, gamma = mu.cpu().numpy(), gamma.cpu().numpy()
 		w = conv2duf.c.weight.cpu().numpy()
-		k_ = w.shape[1]
-		print(w.shape)
+		k_ = w.shape[2]
 		gamma_res = np.zeros(mu.shape+mu.shape[1:])
 		r_2 = memse_dict['r'] ** 2
 		ratio = (memse_dict['sigma'] ** 2 / c ** 2).cpu().numpy()
@@ -133,20 +132,27 @@ class Conv2DUF(nn.Module):
 			for c0 in range(gamma_res.shape[1]):
 				for i0 in range(gamma_res.shape[2]):
 					for j0 in range(gamma_res.shape[3]):
-						# DIAGONALE == VAR
-						gamma_res[bi, c0, i0, j0, c0, i0, j0] += 0.
 						for c0p in range(gamma_res.shape[4]):
 							for i0p in range(gamma_res.shape[5]):
 								for j0p in range(gamma_res.shape[6]):
 									# DOUBLE CONV
-									for ci in range(w.shape[0]):
-										for ii in range(w.shape[1]):
-											for ji in range(w.shape[2]):
-												for cj in range(w.shape[0]):
-													for ij in range(w.shape[1]):
-														for jj in range(w.shape[2]):
+									for ci in range(w.shape[1]):
+										for ii in range(w.shape[2]):
+											for ji in range(w.shape[3]):
+												for cj in range(w.shape[1]):
+													for ij in range(w.shape[2]):
+														for jj in range(w.shape[3]):
 															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
-
 									if c0p != c0 or i0p != i0 or j0p != j0:
 										# le truc rigolo là
 										print('hihi')
+						# DIAGONALE == VAR
+						for ci in range(w.shape[1]):
+							for ii in range(w.shape[2]):
+								for ji in range(w.shape[3]):
+									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
+									gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
+
+									
+		gamma_res *= r_2
+		return mu_res, gamma_res
