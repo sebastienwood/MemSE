@@ -43,19 +43,24 @@ class MemSE(nn.Module):
 			assert input_shape is not None
 			self.bias = nn.Parameter(torch.zeros(*input_shape))
 
-		self.learnt_Gmax = nn.ParameterList()
+		self.learnt_Gmax = self.init_learnt_gmax(quanter, Gmax_init_Wmax)
+		self._var_batch = {}
+		#self.clip_Gmax()
+
+	@staticmethod
+	def init_learnt_gmax(quanter, Gmax_init_Wmax: bool = False):
+		learnt_Gmax = nn.ParameterList()
 		for i in range(len(quanter.Gmax)):
 			if isinstance(quanter.Gmax[i], np.ndarray):
 				lgmax = torch.from_numpy(quanter.Gmax[i]).clone().float()
 			else:
 				lgmax = torch.tensor(quanter.Gmax[i]).clone()
-			self.learnt_Gmax.append(nn.Parameter(lgmax)) # can use quanter._init_Gmax if unsure quant has been cast already
+			learnt_Gmax.append(nn.Parameter(lgmax)) # can use quanter._init_Gmax if unsure quant has been cast already
 			if Gmax_init_Wmax:
 				# Init to Gmax == Wmax for learning
-				self.learnt_Gmax[i].data.copy_(self.quanter.Wmax[i]) # may not work with scalar
-			quanter.actual_params[i].learnt_Gmax = self.learnt_Gmax[i]
-		self._var_batch = {}
-		#self.clip_Gmax()
+				learnt_Gmax[i].data.copy_(quanter.Wmax[i]) # may not work with scalar
+			quanter.actual_params[i].learnt_Gmax = learnt_Gmax[i]
+		return learnt_Gmax
 
 	@property
 	def sigma(self) -> float:

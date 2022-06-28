@@ -39,19 +39,24 @@ def quant_but_diag_(tensor, quant_scheme):
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional[List[int]]=None):
+def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional[List[int]]=None, square_reshape: bool = True):
 	batch_len = mu.shape[0]
 	padded_size = [mu.shape[1], mu.shape[2]+padding*2, mu.shape[3]+padding*2]
 
 	pad_mu = torch.nn.functional.pad(mu, ((padding,) * 4))
 	numel_image = pad_mu.shape[1:].numel()
-	mu = torch.reshape(pad_mu, (batch_len,numel_image))
+	if square_reshape:
+		mu = torch.reshape(pad_mu, (batch_len,numel_image))
 
 	if gamma_shape is not None:# gamma == 0 store only size
-		gamma_shape = [batch_len,numel_image,numel_image]
+		if square_reshape:
+			gamma_shape = [batch_len,numel_image,numel_image]
+		else:
+			raise ValueError('Square reshape not supported if gamma shape is not None')
 	else:
 		pad_gamma = torch.nn.functional.pad(gamma, ((padding,) * 4 + (0, 0) + (padding,) * 4))
-		gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
+		if square_reshape:
+			gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
 
 	return mu, gamma, gamma_shape
 

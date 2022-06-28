@@ -120,13 +120,15 @@ class Conv2DUF(nn.Module):
 		'''A reliable but slow version of mse_var'''
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 		mu_res = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
-		mu, gamma, _ = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=None)
+		mu, gamma, _ = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=None, square_reshape=False)
 		mu, gamma = mu.cpu().numpy(), gamma.cpu().numpy()
 		w = weights.cpu().numpy()
 		k_ = w.shape[2]
-		gamma_res = np.zeros(mu.shape+mu.shape[1:])
+		gamma_res = np.zeros(mu_res.shape+mu_res.shape[1:])
 		r_2 = memse_dict['r'] ** 2
-		ratio = (memse_dict['sigma'] ** 2 / c ** 2).cpu().numpy()
+		ratio = (memse_dict['sigma'] ** 2 / c ** 2).cpu().detach().numpy()
+		if np.ndim(ratio)==0:
+			ratio = np.repeat(ratio, gamma_res.shape[1])
 
 		for bi in range(gamma_res.shape[0]):
 			for c0 in range(gamma_res.shape[1]):
@@ -160,4 +162,4 @@ class Conv2DUF(nn.Module):
 
 									
 		gamma_res *= r_2
-		return mu_res, gamma_res
+		return mu_res, gamma_res, None
