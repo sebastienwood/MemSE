@@ -125,7 +125,6 @@ class Conv2DUF(nn.Module):
 	@staticmethod
 	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
 		'''A reliable but slow version of mse_var'''
-		print('GOING SLOW')
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 		mu_res = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
 		mu, gamma, _ = padded_mu_gamma(memse_dict['mu'], gamma, gamma_shape=None, square_reshape=False)
