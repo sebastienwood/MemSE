@@ -7,10 +7,11 @@ import numpy as np
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
 class Conv2DUF(nn.Module):
-	def __init__(self, conv, input_shape, output_shape):
+	def __init__(self, conv, input_shape, output_shape, slow: bool = False):
 		super().__init__()
 		assert len(output_shape) == 3, f'chw or cwh with no batch dim'
 		self.c = conv
+		self.__slow = slow
 
 		#g = 2
 		#t = torch.nn.Conv2d(conv.weight.shape[1]*g, conv.weight.shape[0]*g, conv.weight.shape[2], conv.stride, conv.padding, conv.dilation, groups=g, bias=False)
@@ -32,6 +33,12 @@ class Conv2DUF(nn.Module):
 		if self.bias is not None:
 			out += self.bias[:, None, None]
 		return out
+
+	def _mse_var(self, conv2duf, memse_dict, ct, Gpos):
+		if self.__slow == True:
+			return self.slow_mse_var(conv2duf, memse_dict, ct, Gpos)
+		else:
+			return self.mse_var(conv2duf, memse_dict, ct, Gpos)
 
 	@property
 	def padding(self):

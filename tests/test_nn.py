@@ -33,7 +33,7 @@ def get_mses(memse):
     return mse_th, mse_sim
 
 def test_conv2duf():
-    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
+    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:], slow=True)
     quanter = MemristorQuant(conv2duf, std_noise=0.1)
     memse = MemSE(conv2duf, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
@@ -45,7 +45,6 @@ def test_conv2duf():
     print('----------')
     print(mse_th.mean())
     print(mse_sim.mean())
-    #TODO check shapes ?
     assert torch.allclose(mse_th, mse_sim)
 
 
@@ -62,7 +61,7 @@ def test_conv2duf_mse_var():
     print(mu_slow.mean())
     print(gamma.mean())
     print(gamma_slow.mean())
-    assert False
+    assert False # so that logs are printed
 
 
 def test_conv2d():
