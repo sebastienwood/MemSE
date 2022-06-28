@@ -5,14 +5,14 @@ from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma
 
-
+torch.manual_seed(0)
 inp = torch.rand(2, 3, 3, 3)
 conv = nn.Conv2d(3, 3, 2, bias=False)
 out = conv(inp)
 memse_dict = {
 			'mu': inp,
 			'gamma_shape': None,
-			'gamma': torch.rand([*inp.shape, *inp.shape[1:]]),
+			'gamma': torch.zeros([*inp.shape, *inp.shape[1:]]),
 			'P_tot': torch.zeros(inp.shape[0]),
 			'current_type': None,
 			'compute_power': False,
@@ -56,11 +56,11 @@ def test_conv2duf_mse_var():
     ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
     mu, gamma, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
     mu_slow, gamma_slow, _ = conv2duf.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
-    print('HERE')
     print(mu.mean())
     print(mu_slow.mean())
     print(gamma.mean())
     print(gamma_slow.mean())
+    print(torch.count_nonzero(gamma_slow)/torch.numel(gamma_slow))
     assert False # so that logs are printed
 
 
