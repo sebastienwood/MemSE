@@ -112,13 +112,13 @@ class Conv2DUF(nn.Module):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 
-		gamma_diag = gamma_to_diag(gamma)
-		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
-		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
-		first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
+		# gamma_diag = gamma_to_diag(gamma)
+		# first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
+		# first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
+		# first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 		
-		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)	
-		gamma_add_diag(gamma, first_comp)
+		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+		# gamma_add_diag(gamma, first_comp)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
 
@@ -137,6 +137,13 @@ class Conv2DUF(nn.Module):
 		if np.ndim(ratio)==0:
 			ratio = np.repeat(ratio, gamma_res.shape[1])
 
+		conv2duf.inner_loop(gamma_res, ratio, w, mu, gamma, k_)
+									
+		gamma_res *= r_2
+		return torch.from_numpy(mu_res), torch.from_numpy(gamma_res), None
+
+	@staticmethod
+	def inner_loop(gamma_res, ratio, w, mu, gamma, k_):
 		for bi in range(gamma_res.shape[0]):
 			for c0 in range(gamma_res.shape[1]):
 				for i0 in range(gamma_res.shape[2]):
@@ -148,25 +155,21 @@ class Conv2DUF(nn.Module):
 									for ci in range(w.shape[1]):
 										for ii in range(w.shape[2]):
 											for ji in range(w.shape[3]):
-												if c0 == c0p:
-													gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
+												# if c0 == c0p:
+												# 	gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
 												for cj in range(w.shape[1]):
 													for ij in range(w.shape[2]):
 														for jj in range(w.shape[3]):
 															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
 									
 						# DIAGONALE == VAR
-						for ci in range(w.shape[1]):
-							for ii in range(w.shape[2]):
-								for ji in range(w.shape[3]):
-									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
-									gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
-									for cj in range(w.shape[1]):
-										for ij in range(w.shape[2]):
-											for jj in range(w.shape[3]):
-												if ci != cj or ii != ij or ji != jj:
-													gamma_res[bi, c0, i0, j0, c0, i0, j0] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
-
-									
-		gamma_res *= r_2
-		return torch.from_numpy(mu_res), torch.from_numpy(gamma_res), None
+						# for ci in range(w.shape[1]):
+						# 	for ii in range(w.shape[2]):
+						# 		for ji in range(w.shape[3]):
+						# 			g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
+						# 			gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
+						# 			for cj in range(w.shape[1]):
+						# 				for ij in range(w.shape[2]):
+						# 					for jj in range(w.shape[3]):
+						# 						if ci != cj or ii != ij or ji != jj:
+						# 							gamma_res[bi, c0, i0, j0, c0, i0, j0] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]

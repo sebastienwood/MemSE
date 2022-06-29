@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 import pytest
+import time
 from MemSE.network_manipulations import conv_to_fc
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma
 
 torch.manual_seed(0)
-inp = torch.rand(2, 3, 3, 3)
+inp = torch.rand(2, 3, 9, 9)
 conv = nn.Conv2d(3, 3, 2, bias=False)
 out = conv(inp)
 SIGMA = 0.1
@@ -15,7 +16,7 @@ R = 1
 memse_dict = {
 			'mu': inp,
 			'gamma_shape': None,
-			'gamma': torch.zeros([*inp.shape, *inp.shape[1:]]),
+			'gamma': torch.rand([*inp.shape, *inp.shape[1:]]),
 			'P_tot': torch.zeros(inp.shape[0]),
 			'current_type': None,
 			'compute_power': False,
@@ -59,13 +60,23 @@ def test_conv2duf_mse_var():
     _ = MemSE.init_learnt_gmax(quanter)
     quanter.quant()
     ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
+    start = time.time()
     mu, gamma, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
+    print(time.time()- start)
+    start = time.time()
     mu_slow, gamma_slow, _ = conv2duf.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
-    print(mu.mean())
-    print(mu_slow.mean())
-    print(gamma.mean())
-    print(gamma_slow.mean())
-    print(torch.count_nonzero(gamma_slow)/torch.numel(gamma_slow))
+    print(time.time()- start)
+    print('Reporting fast')
+    print('MEAN', gamma.mean())
+    print('SPARSITY', torch.count_nonzero(gamma)/torch.numel(gamma))
+    print('SHAPE', gamma.shape)
+    print('Reporting slow')
+    print('MEAN', gamma_slow.mean())
+    print('SPARSITY', torch.count_nonzero(gamma_slow)/torch.numel(gamma_slow))
+    print('SHAPE', gamma_slow.shape)
+    print('Reporting error')
+    assert gamma.shape == gamma_slow.shape
+    print('MSE', ((gamma - gamma_slow) ** 2).mean())
     assert False # so that logs are printed
 
 
