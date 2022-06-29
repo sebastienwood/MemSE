@@ -61,10 +61,10 @@ def test_conv2duf_mse_var():
     quanter.quant()
     ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
     start = time.time()
-    mu, gamma, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
+    mu, gamma, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
     print(time.time()- start)
     start = time.time()
-    mu_slow, gamma_slow, _ = conv2duf.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
+    mu_slow, gamma_slow, _ = conv2duf.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
     print(time.time()- start)
     print('Reporting fast')
     print('MEAN', gamma.mean())

@@ -34,11 +34,11 @@ class Conv2DUF(nn.Module):
 			out += self.bias[:, None, None]
 		return out
 
-	def _mse_var(self, conv2duf, memse_dict, ct, w):
+	def _mse_var(self, conv2duf, memse_dict, ct, w, sigma):
 		if self.__slow == True:
-			return self.slow_mse_var(conv2duf, memse_dict, ct, w)
+			return self.slow_mse_var(conv2duf, memse_dict, ct, w, sigma)
 		else:
-			return self.mse_var(conv2duf, memse_dict, ct, w)
+			return self.mse_var(conv2duf, memse_dict, ct, w, sigma)
 
 	@property
 	def padding(self):
@@ -166,7 +166,7 @@ class Conv2DUF(nn.Module):
 						for ci in range(w.shape[1]):
 							for ii in range(w.shape[2]):
 								for ji in range(w.shape[3]):
-									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
+									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]
 									gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
 									for cj in range(w.shape[1]):
 										for ij in range(w.shape[2]):
