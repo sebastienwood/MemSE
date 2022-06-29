@@ -25,6 +25,9 @@ class Conv2DUF(nn.Module):
 		#self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
 		self.bias = conv.bias.detach().clone() if conv.bias is not None else None
 
+	def change_impl(self, slow: bool = False):
+		self.__slow = slow
+
 	def forward(self, x):
 		inp_unf = self.unfold_input(x)
 		#out_unf = torch.einsum('bfp,pfc->bcp', inp_unf, self.weight)
@@ -163,6 +166,7 @@ class Conv2DUF(nn.Module):
 															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
 									
 						# DIAGONALE == VAR
+						gamma_res[bi, c0, i0, j0, c0, i0, j0] = 0
 						for ci in range(w.shape[1]):
 							for ii in range(w.shape[2]):
 								for ji in range(w.shape[3]):

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pytest
 import time
-from MemSE.network_manipulations import conv_to_fc
+from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma
@@ -10,7 +10,14 @@ from MemSE.nn.utils import mse_gamma
 torch.manual_seed(0)
 inp = torch.rand(2, 3, 9, 9)
 conv = nn.Conv2d(3, 3, 2, bias=False)
+conv_2 = nn.Conv2d(3, 3, 2, bias=False)
+
+seq = nn.Sequential(conv,conv_2)
+seq_conv2duf = conv_to_unfolded(seq, inp.shape[1:])
+
 out = conv(inp)
+conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
+out_seq = seq(inp)
 SIGMA = 0.1
 R = 1
 memse_dict = {
@@ -36,12 +43,17 @@ def get_mses(memse):
     mse_sim = memse.mse_sim(inp, out)
     return mse_th, mse_sim
 
+def switch_conv2duf_impl(m, slow):
+    if type(m) == Conv2DUF:
+        m.change_impl(slow)
 
+
+@pytest.mark.parametrize("net", [conv2duf, seq_conv2duf])
 @pytest.mark.parametrize("slow", [True, False])
-def test_conv2duf(slow):
-    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:], slow=slow)
-    quanter = MemristorQuant(conv2duf, std_noise=0.1)
-    memse = MemSE(conv2duf, quanter, input_bias=False)
+def test_conv2duf(net, slow):
+    net.apply(lambda m: switch_conv2duf_impl(m, slow))
+    quanter = MemristorQuant(net, std_noise=0.1)
+    memse = MemSE(net, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
     mse_th = mse_gamma(out, mu, gamma)
     mse_sim = memse.mse_sim(inp, out, reps=1e5)
@@ -49,8 +61,9 @@ def test_conv2duf(slow):
     #print(means)
     #print(varis)
     #print('----------')
-    print(mse_th)
-    print(mse_sim)
+    print(mse_th.mean())
+    print(mse_sim.mean())
+    print('MSE', ((mse_th - mse_sim) ** 2).mean())
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
 
 
