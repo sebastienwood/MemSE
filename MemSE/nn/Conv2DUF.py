@@ -1,5 +1,5 @@
 from __future__ import annotations
-from numpy import diag
+import math
 import torch
 import torch.nn as nn
 import numpy as np
@@ -85,14 +85,14 @@ class Conv2DUF(nn.Module):
 		if memse_dict['compute_power']:
 			Gpos = torch.clip(conv2duf.original_weight, min=0)
 			Gneg = torch.clip(-conv2duf.original_weight, min=0)
-			new_mu_pos, new_gamma_pos, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gpos)
-			new_mu_neg, new_gamma_neg, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gneg)
+			new_mu_pos, new_gamma_pos, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gpos, memse_dict['sigma'])
+			new_mu_neg, new_gamma_neg, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gneg, memse_dict['sigma'])
 
 			P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
 		else:
 			P_tot = 0.
 
-		mu, gamma, gamma_shape = conv2duf._mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight)
+		mu, gamma, gamma_shape = conv2duf._mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, memse_dict['sigma'] * math.sqrt(2))
 
 		#mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
 
@@ -108,12 +108,12 @@ class Conv2DUF(nn.Module):
 		memse_dict['gamma_shape'] = gamma_shape
 
 	@staticmethod
-	def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
+	def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights, sigma):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 
 		# gamma_diag = gamma_to_diag(gamma)
-		# first_comp = (gamma_diag + memse_dict['mu'] ** 2) * memse_dict['sigma'] ** 2 / c ** 2
+		# first_comp = (gamma_diag + memse_dict['mu'] ** 2) * sigma ** 2 / c ** 2
 		# first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
 		# first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 		
@@ -123,7 +123,7 @@ class Conv2DUF(nn.Module):
 		return mu, gamma, None
 
 	@staticmethod
-	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights):
+	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights, sigma):
 		'''A reliable but slow version of mse_var'''
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 		mu_res = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
@@ -133,7 +133,7 @@ class Conv2DUF(nn.Module):
 		k_ = w.shape[2]
 		gamma_res = np.zeros(mu_res.shape+mu_res.shape[1:])
 		r_2 = memse_dict['r'] ** 2
-		ratio = (memse_dict['sigma'] ** 2 / c ** 2).cpu().detach().numpy()
+		ratio = (sigma ** 2 / c ** 2).cpu().detach().numpy()
 		if np.ndim(ratio)==0:
 			ratio = np.repeat(ratio, gamma_res.shape[1])
 
