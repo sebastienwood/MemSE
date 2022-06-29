@@ -160,7 +160,7 @@ class Conv2DUF(nn.Module):
 							for ii in range(w.shape[2]):
 								for ji in range(w.shape[3]):
 									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]**2
-									gamma_res[bi, c0, i0, j0, c0, i0, j0] = ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
+									gamma_res[bi, c0, i0, j0, c0, i0, j0] += ratio[c0] * (mu[bi, ci, i0+ii, j0+ji]**2 + g_2) + g_2 * w[c0, ci, ii, ji] ** 2
 									for cj in range(w.shape[1]):
 										for ij in range(w.shape[2]):
 											for jj in range(w.shape[3]):

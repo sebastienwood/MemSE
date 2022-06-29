@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import pytest
 from MemSE.network_manipulations import conv_to_fc
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
@@ -9,6 +10,8 @@ torch.manual_seed(0)
 inp = torch.rand(2, 3, 3, 3)
 conv = nn.Conv2d(3, 3, 2, bias=False)
 out = conv(inp)
+SIGMA = 0.1
+R = 1
 memse_dict = {
 			'mu': inp,
 			'gamma_shape': None,
@@ -17,8 +20,8 @@ memse_dict = {
 			'current_type': None,
 			'compute_power': False,
 			'taylor_order': 1,
-			'sigma': 0.1,
-			'r': 1
+			'sigma': SIGMA,
+			'r': R
 }
 
 def nn2memse(nn):
@@ -32,25 +35,27 @@ def get_mses(memse):
     mse_sim = memse.mse_sim(inp, out)
     return mse_th, mse_sim
 
-def test_conv2duf():
-    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:], slow=True)
+
+@pytest.mark.parametrize("slow", [True, False])
+def test_conv2duf(slow):
+    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:], slow=slow)
     quanter = MemristorQuant(conv2duf, std_noise=0.1)
     memse = MemSE(conv2duf, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
     mse_th = mse_gamma(out, mu, gamma)
-    mse_sim = memse.mse_sim(inp, out)
-    mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
-    print(means)
-    print(varis)
-    print('----------')
-    print(mse_th.mean())
-    print(mse_sim.mean())
-    assert torch.allclose(mse_th, mse_sim)
+    mse_sim = memse.mse_sim(inp, out, reps=1e5)
+    #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
+    #print(means)
+    #print(varis)
+    #print('----------')
+    print(mse_th)
+    print(mse_sim)
+    assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
 
 
 def test_conv2duf_mse_var():
     conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
-    quanter = MemristorQuant(conv2duf, std_noise=0.1)
+    quanter = MemristorQuant(conv2duf, std_noise=SIGMA)
     _ = MemSE.init_learnt_gmax(quanter)
     quanter.quant()
     ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax

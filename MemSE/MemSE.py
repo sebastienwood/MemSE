@@ -98,6 +98,7 @@ class MemSE(nn.Module):
 		return data['mu'], data['gamma'], data['P_tot']
 
 	def mse_sim(self, x, tar, reps: int = 1000):
+		reps = int(reps)
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
 		self.quant(c_one=False)
