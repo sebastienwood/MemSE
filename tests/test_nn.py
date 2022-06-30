@@ -10,9 +10,10 @@ from MemSE.nn.utils import mse_gamma
 torch.manual_seed(0)
 inp = torch.rand(2, 3, 9, 9)
 conv = nn.Conv2d(3, 3, 2, bias=False)
-conv_2 = nn.Conv2d(3, 3, 2, bias=False)
+def conv_factory():
+    return nn.Conv2d(3, 3, 2, bias=False)
 
-seq = nn.Sequential(conv,conv_2)
+seq = nn.Sequential(conv,*[conv_factory() for _ in range(5)])
 seq_conv2duf = conv_to_unfolded(seq, inp.shape[1:])
 
 out = conv(inp)
@@ -60,7 +61,7 @@ def test_conv2duf(net, slow):
     mu, gamma, p_tot = memse.no_power_forward(inp)
     o = out if f'{net=}'.split('=')[0] == "conv2duf" else out_seq
     mse_th = mse_gamma(o, mu, gamma)
-    mse_sim = memse.mse_sim(inp, o, reps=1e5)
+    mse_sim = memse.mse_sim(inp, o, reps=1e6)
     #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
     #print(means)
     #print(varis)
