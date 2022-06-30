@@ -52,7 +52,7 @@ class ReLU_(MemSEAct):
 
     @classmethod
     def derivatives(cls, module, data, mu):
-        return {1: torch.hardtanh(torch.relu(mu), max_val=0.)}
+        return {1: torch.nn.functional.hardtanh(torch.relu(mu), max_val=0.)}
 
 
 ReLU = ReLU_()

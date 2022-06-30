@@ -8,7 +8,7 @@ __all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_']
 
 def mse_gamma(tar, mu, gamma, verbose: bool = False):
 	if len(tar.shape) != len(mu.shape):
-		tar = tar.view_as(mu)
+		tar = tar.reshape_as(mu)
 	vari = torch.diagonal(gamma, dim1=1, dim2=2)
 	exp = torch.square(mu - tar)
 	if verbose:

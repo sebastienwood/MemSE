@@ -13,14 +13,14 @@ class MemSEAct:
     def __call__(cls, module, data) -> Any:
         mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
         degree_taylor = data['taylor_order']
+        if gamma_shape is not None:
+            gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
+            gamma_shape = None
 
         gamma_view = gamma.view(gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
         sigma_2 = gamma_view.diagonal(dim1=1, dim2=2)
         sigma_2 = sigma_2.view(*gamma.shape[:4])
         assert sigma_2.numel() == mu.numel()
-        if gamma_shape is not None:
-            gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
-            gamma_shape = None
 
         #TODO update gamma, prepare derivatives, store and pass them around as needed
         d_mu = cls.derivatives(module, data, mu)
