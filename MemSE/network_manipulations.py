@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 from MemSE.nn import Conv2DUF
@@ -91,9 +92,11 @@ def build_sequential_linear(conv):
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
     conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding, conv.stride)
-    print(conv_fced.shape)
+    # print(conv_fced.shape)
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
     linear.weight.data = conv_fced
+    linear.__padding = conv.padding
+    linear.__stride = conv.stride
     seq = nn.Sequential(
         LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),  # is padding conv dependent ? i.e. should we grab params ?
         nn.Flatten(),
@@ -102,11 +105,11 @@ def build_sequential_linear(conv):
         LambdaLayer(lambda x: torch.add(x, conv.bias[:, None, None]) if conv.bias is not None else x)
     )
     rand_y_repl = seq(rand_x)
-    print(rand_y.shape)
-    print(rand_y)
-    print('*'*15)
-    print(rand_y_repl.shape)
-    print(rand_y_repl)
+    # print(rand_y.shape)
+    # print(rand_y)
+    # print('*'*15)
+    # print(rand_y_repl.shape)
+    # print(rand_y_repl)
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
@@ -161,8 +164,10 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     else:
         op = build_sequential_unfolded_linear
     model = model.cpu()
+    model = copy.deepcopy(model)
     model.eval()
     if verbose:
+        print('Before conversion, model is:')
         print(model)
 
     x = torch.rand(input_shape)

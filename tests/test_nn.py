@@ -98,10 +98,13 @@ def test_conv2duf_mse_var():
     assert False # so that logs are printed
 
 
-def test_conv2d():
-    out = conv(inp)
-    conv2duf = conv_to_fc(conv, inp.shape[1:], verbose=True)
+@pytest.mark.parametrize("net", [conv, seq])
+def test_conv2d(net):
+    print('Starting test')
+    out = net(inp)
+    conv2duf = conv_to_fc(net, inp.shape[1:], verbose=False)
     out_conv2duf = conv2duf(inp)
+    print('First asserts')
     assert out.shape == out_conv2duf.shape
     print(out.mean())
     print(out_conv2duf.mean())
