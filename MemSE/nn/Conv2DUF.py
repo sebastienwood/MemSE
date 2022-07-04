@@ -9,7 +9,7 @@ from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_dia
 class Conv2DUF(nn.Module):
 	def __init__(self, conv, input_shape, output_shape, slow: bool = False):
 		super().__init__()
-		assert len(output_shape) == 3, f'chw or cwh with no batch dim'
+		assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
 		self.c = conv
 		self.__slow = slow
 
