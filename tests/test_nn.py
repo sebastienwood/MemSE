@@ -2,26 +2,31 @@ import torch
 import torch.nn as nn
 import pytest
 import time
-from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded
+from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, fuse_conv_bn
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma
+from MemSE.models import smallest_vgg, resnet18
 
 torch.manual_seed(0)
 inp = torch.rand(2, 3, 9, 9)
-conv = nn.Conv2d(3, 3, 2, bias=False)
 def conv_factory():
     return nn.Conv2d(3, 3, 2, bias=False)
+conv = conv_factory()
 
 seq = nn.Sequential(conv,*[conv_factory() for _ in range(5)])
-seq_conv2duf = conv_to_unfolded(seq, inp.shape[1:])
+
+smallest_vgg_ = smallest_vgg()
+resnet18_ = fuse_conv_bn(resnet18().eval(), 'resnet18')
 
 out = conv(inp)
-conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
 out_seq = seq(inp)
+
+seq_conv2duf = conv_to_unfolded(seq, inp.shape[1:])
+conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
+
 out_seq_conv2duf = seq_conv2duf(inp)
-def test_impl_correctness():
-    assert torch.allclose(out_seq, out_seq_conv2duf)
+
 SIGMA = 0.1
 R = 1
 memse_dict = {
@@ -35,6 +40,12 @@ memse_dict = {
 			'sigma': SIGMA,
 			'r': R
 }
+MODELS = [
+    conv,
+    seq,
+    smallest_vgg_,
+    resnet18_
+]
 
 def nn2memse(nn):
     quanter = MemristorQuant(nn)
@@ -52,16 +63,20 @@ def switch_conv2duf_impl(m, slow):
         m.change_impl(slow)
 
 
-@pytest.mark.parametrize("net", [conv2duf, seq_conv2duf])
+@pytest.mark.parametrize("net", MODELS)
 @pytest.mark.parametrize("slow", [True, False])
 def test_conv2duf(net, slow):
     o = net(inp)
+    net = conv_to_unfolded(net, inp.shape[1:])
     net.apply(lambda m: switch_conv2duf_impl(m, slow))
+    o_uf = net(inp)
+    assert o.shape == o_uf.shape
+    assert torch.allclose(o, o_uf)
     quanter = MemristorQuant(net, std_noise=0.1)
     memse = MemSE(net, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
     mse_th = mse_gamma(o, mu, gamma)
-    mse_sim = memse.mse_sim(inp, o, reps=1e6)
+    mse_sim = memse.mse_sim(inp, o, reps=1e5)
     #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
     #print(means)
     #print(varis)
@@ -98,7 +113,7 @@ def test_conv2duf_mse_var():
     assert False # so that logs are printed
 
 
-@pytest.mark.parametrize("net", [conv, seq])
+@pytest.mark.parametrize("net", MODELS)
 def test_conv2d(net):
     print('Starting test')
     out = net(inp)
