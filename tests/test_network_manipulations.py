@@ -11,9 +11,11 @@ y = record_shapes(conv, inp)
 def test_memristor_unfolded():
     conv2duf = Conv2DUF(conv, inp.shape, conv.__output_shape[1:])
     y_hat = conv2duf(inp)
+    assert y.shape == y_hat.shape
     assert torch.allclose(y, y_hat)
 
 def test_memristor_large():
     conv2duf = build_sequential_linear(conv)
     y_hat = conv2duf(inp)
+    assert y.shape == y_hat.shape
     assert torch.allclose(y, y_hat)

@@ -95,8 +95,8 @@ def build_sequential_linear(conv):
     # print(conv_fced.shape)
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
     linear.weight.data = conv_fced
-    linear.__padding = conv.padding
-    linear.__stride = conv.stride
+    linear.weight.__padding = conv.padding
+    linear.weight.__stride = conv.stride
     seq = nn.Sequential(
         LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),  # is padding conv dependent ? i.e. should we grab params ?
         nn.Flatten(),

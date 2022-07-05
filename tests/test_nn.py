@@ -55,11 +55,11 @@ def switch_conv2duf_impl(m, slow):
 @pytest.mark.parametrize("net", [conv2duf, seq_conv2duf])
 @pytest.mark.parametrize("slow", [True, False])
 def test_conv2duf(net, slow):
+    o = net(inp)
     net.apply(lambda m: switch_conv2duf_impl(m, slow))
     quanter = MemristorQuant(net, std_noise=0.1)
     memse = MemSE(net, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
-    o = out if f'{net=}'.split('=')[0] == "conv2duf" else out_seq
     mse_th = mse_gamma(o, mu, gamma)
     mse_sim = memse.mse_sim(inp, o, reps=1e6)
     #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
