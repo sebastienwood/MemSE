@@ -117,7 +117,7 @@ def build_sequential_linear(conv):
 def build_sequential_unfolded_linear(conv):
     current_input_shape = conv.__input_shape
     current_output_shape = conv.__output_shape
-    if len(current_output_shape):
+    if len(current_output_shape) == 4:
         current_output_shape = current_output_shape[1:]
     return Conv2DUF(conv, current_input_shape, current_output_shape)
 

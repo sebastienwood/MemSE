@@ -9,12 +9,12 @@ from MemSE.nn.utils import mse_gamma
 from MemSE.models import smallest_vgg, resnet18
 
 torch.manual_seed(0)
-inp = torch.rand(2, 3, 32, 32)
+inp = torch.rand(2, 3, 9, 9)
 def conv_factory():
     return nn.Conv2d(3, 3, 3, bias=False)
 conv = conv_factory()
 
-seq = nn.Sequential(conv,*[conv_factory() for _ in range(5)])
+seq = nn.Sequential(conv,*[conv_factory() for _ in range(3)])
 
 smallest_vgg_ = smallest_vgg()
 resnet18_ = fuse_conv_bn(resnet18().eval(), 'resnet18')
@@ -71,7 +71,7 @@ def test_conv2duf(net, slow):
     net.apply(lambda m: switch_conv2duf_impl(m, slow))
     o_uf = net(inp)
     assert o.shape == o_uf.shape
-    assert torch.allclose(o, o_uf)
+    assert torch.allclose(o, o_uf, rtol=1e-3)
     quanter = MemristorQuant(net, std_noise=0.1)
     memse = MemSE(net, quanter, input_bias=False)
     mu, gamma, p_tot = memse.no_power_forward(inp)
@@ -87,7 +87,7 @@ def test_conv2duf(net, slow):
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
 
 
-def test_conv2duf_mse_var():
+def test_conv2duf_mse_var(net):
     conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
     quanter = MemristorQuant(conv2duf, std_noise=SIGMA)
     _ = MemSE.init_learnt_gmax(quanter)

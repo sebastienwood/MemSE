@@ -46,19 +46,19 @@ def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional
 	pad_mu = torch.nn.functional.pad(mu, ((padding,) * 4))
 	numel_image = pad_mu.shape[1:].numel()
 	if square_reshape:
-		mu = torch.reshape(pad_mu, (batch_len,numel_image))
+		pad_mu = torch.reshape(pad_mu, (batch_len,numel_image))
 
 	if gamma_shape is not None:# gamma == 0 store only size
 		if square_reshape:
 			gamma_shape = [batch_len,numel_image,numel_image]
 		else:
-			raise ValueError('Square reshape not supported if gamma shape is not None')
+			raise ValueError('No square reshape not supported if gamma shape is not None')
 	else:
 		pad_gamma = torch.nn.functional.pad(gamma, ((padding,) * 4 + (0, 0) + (padding,) * 4))
 		if square_reshape:
-			gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
+			pad_gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
 
-	return mu, gamma, gamma_shape
+	return pad_mu, pad_gamma, gamma_shape
 
 
 #@torch.jit.script
