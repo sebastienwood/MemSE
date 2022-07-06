@@ -54,10 +54,11 @@ def padded_mu_gamma(mu, gamma: torch.Tensor, padding:Union[int, Tuple]=1, gamma_
 		pad_mu = torch.reshape(pad_mu, (batch_len,numel_image))
 
 	if gamma_shape is not None:# gamma == 0 store only size
+		pad_gamma = gamma
 		if square_reshape:
 			gamma_shape = [batch_len,numel_image,numel_image]
 		else:
-			raise ValueError('No square reshape not supported if gamma shape is not None')
+			gamma_shape = pad_mu.shape + pad_mu.shape[1:]
 	else:
 		pad_gamma = torch.nn.functional.pad(gamma, (padding + (0, 0) + padding))
 		if square_reshape:
