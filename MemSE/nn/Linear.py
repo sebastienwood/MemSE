@@ -48,15 +48,9 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 	l = mu.shape[2]
 	
 	print('Start lll:')
-	print(image_shape)
-	print(W.shape)
-	print(image_shape.numel())
-	if W.shape[1] != image_shape.numel():
-		print('Its a conv')
-		conv = True
+	if hasattr(W, '__padding'):
 		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape, padding=W.__padding)
 	else:
-		conv=False
 		mu = torch.reshape(mu, (batch_len, image_shape.numel()))
 		if gamma_shape is not None: # gamma == 0 store only size
 			gamma_shape = [batch_len,mu.shape[1],mu.shape[1]]
@@ -80,8 +74,7 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 
 	mu, gamma, gamma_shape = linear_layer_vec_batched(mu, gamma, W, sigma_c, r, gamma_shape=gamma_shape)
 
-	if conv:
-		print('its a conv')
+	if hasattr(W, '__padding'):
 		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
 		if gamma_shape is not None:
 			gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
