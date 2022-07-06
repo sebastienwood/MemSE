@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import opt_einsum as oe
 
-from typing import Optional, List
+from typing import Optional, List, Tuple, Union
 
 __all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_']
 
@@ -39,11 +39,16 @@ def quant_but_diag_(tensor, quant_scheme):
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional[List[int]]=None, square_reshape: bool = True):
+def padded_mu_gamma(mu, gamma: torch.Tensor, padding:Union[int, Tuple]=1, gamma_shape:Optional[List[int]]=None, square_reshape: bool = True):
+	if isinstance(padding, int):
+		padding = (padding, padding, padding, padding)
+	if isinstance(padding, tuple) and len(padding) == 2:
+		padding = (padding[1], padding[1], padding[0], padding[0])
+	assert len(padding) == 4
 	batch_len = mu.shape[0]
-	padded_size = [mu.shape[1], mu.shape[2]+padding*2, mu.shape[3]+padding*2]
+	#padded_size = [mu.shape[1], mu.shape[2]+padding*2, mu.shape[3]+padding*2]
 
-	pad_mu = torch.nn.functional.pad(mu, ((padding,) * 4))
+	pad_mu = torch.nn.functional.pad(mu, padding)
 	numel_image = pad_mu.shape[1:].numel()
 	if square_reshape:
 		pad_mu = torch.reshape(pad_mu, (batch_len,numel_image))
@@ -54,7 +59,7 @@ def padded_mu_gamma(mu, gamma: torch.Tensor, padding:int=1, gamma_shape:Optional
 		else:
 			raise ValueError('No square reshape not supported if gamma shape is not None')
 	else:
-		pad_gamma = torch.nn.functional.pad(gamma, ((padding,) * 4 + (0, 0) + (padding,) * 4))
+		pad_gamma = torch.nn.functional.pad(gamma, (padding + (0, 0) + padding))
 		if square_reshape:
 			pad_gamma = torch.reshape(pad_gamma, (batch_len,numel_image,numel_image))
 

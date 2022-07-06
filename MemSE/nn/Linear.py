@@ -47,10 +47,14 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 	image_shape = mu.shape[1:]
 	l = mu.shape[2]
 	
-
+	print('Start lll:')
+	print(image_shape)
+	print(W.shape)
+	print(image_shape.numel())
 	if W.shape[1] != image_shape.numel():
+		print('Its a conv')
 		conv = True
-		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape)
+		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape, padding=W.__padding)
 	else:
 		conv=False
 		mu = torch.reshape(mu, (batch_len, image_shape.numel()))
@@ -77,6 +81,7 @@ def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:flo
 	mu, gamma, gamma_shape = linear_layer_vec_batched(mu, gamma, W, sigma_c, r, gamma_shape=gamma_shape)
 
 	if conv:
+		print('its a conv')
 		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
 		if gamma_shape is not None:
 			gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
@@ -90,6 +95,8 @@ def k_linear_layer():
 
 
 def linear(module, data):
+	print('in lll')
+	print(data['mu'].shape)
 	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
 													    data['mu'],
 														data['gamma'],
@@ -99,6 +106,8 @@ def linear(module, data):
 														data['r'],
 														data['gamma_shape'],
 														compute_power=data['compute_power'])
+	print('out lll')
+	print(x.shape)
 	data['P_tot'] += P_tot_i
 	data['current_type'] = 'Linear'
 	data['mu'] = x
