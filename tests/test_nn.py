@@ -9,9 +9,9 @@ from MemSE.nn.utils import mse_gamma
 from MemSE.models import smallest_vgg, resnet18
 
 torch.manual_seed(0)
-inp = torch.rand(2, 3, 9, 9)
+inp = torch.rand(2, 3, 32, 32)
 def conv_factory():
-    return nn.Conv2d(3, 3, 2, bias=False)
+    return nn.Conv2d(3, 3, 3, bias=False)
 conv = conv_factory()
 
 seq = nn.Sequential(conv,*[conv_factory() for _ in range(5)])

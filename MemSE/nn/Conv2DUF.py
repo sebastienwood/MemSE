@@ -130,7 +130,9 @@ class Conv2DUF(nn.Module):
 		'''A reliable but slow version of mse_var'''
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 		mu_res = (conv2duf(memse_dict['mu']) * memse_dict['r']).cpu().numpy()
+		print(gamma.shape)
 		mu, gamma, _ = padded_mu_gamma(memse_dict['mu'], gamma, gamma_shape=None, square_reshape=False)
+		print(gamma.shape)
 		mu, gamma = mu.cpu().numpy(), gamma.cpu().numpy()
 		w = weights.cpu().numpy()
 		k_ = w.shape[2]
@@ -146,7 +148,7 @@ class Conv2DUF(nn.Module):
 		return torch.from_numpy(mu_res), torch.from_numpy(gamma_res), None
 
 	@staticmethod
-	def inner_loop(gamma_res, ratio, w, mu, gamma, k_):
+	def inner_loop(gamma_res, ratio, w, mu, gamma):
 		for bi in range(gamma_res.shape[0]):
 			for c0 in range(gamma_res.shape[1]):
 				for i0 in range(gamma_res.shape[2]):
@@ -163,7 +165,7 @@ class Conv2DUF(nn.Module):
 												for cj in range(w.shape[1]):
 													for ij in range(w.shape[2]):
 														for jj in range(w.shape[3]):
-															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
+															gamma_res[bi, c0, i0, j0, c0p, i0p, j0p] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii, j0+ji, cj, i0p+ij, j0p+jj]
 									
 						# DIAGONALE == VAR
 						gamma_res[bi, c0, i0, j0, c0, i0, j0] = 0
@@ -176,4 +178,4 @@ class Conv2DUF(nn.Module):
 										for ij in range(w.shape[2]):
 											for jj in range(w.shape[3]):
 												if ci != cj or ii != ij or ji != jj:
-													gamma_res[bi, c0, i0, j0, c0, i0, j0] += w[c0,ci,ii,ji] * w[c0p, cj, ij, jj] * gamma[bi, ci, i0+ii-k_, j0+ji-k_, cj, i0p+ij-k_, j0p+jj-k_]
+													gamma_res[bi, c0, i0, j0, c0, i0, j0] += w[c0,ci,ii,ji] * w[c0, cj, ij, jj] * gamma[bi, ci, i0+ii, j0+ji, cj, i0+ij, j0+jj]
