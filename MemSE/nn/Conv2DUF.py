@@ -134,7 +134,7 @@ class Conv2DUF(nn.Module):
 		mu, gamma = mu.cpu().numpy(), gamma.cpu().numpy()
 		w = weights.cpu().numpy()
 		#k_ = w.shape[2] / 2
-		gamma_res = np.zeros(mu_res.shape+mu_res.shape[1:])
+		gamma_res = np.zeros(mu_res.shape + mu_res.shape[1:])
 		r_2 = memse_dict['r'] ** 2
 		ratio = (sigma ** 2 / c ** 2).cpu().detach().numpy()
 		if np.ndim(ratio)==0:

@@ -170,6 +170,8 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
         print('Before conversion, model is:')
         print(model)
 
+    if len(input_shape) == 4:
+        input_shape = input_shape[1:]
     x = torch.rand(input_shape)
     x = x[None, :, :, :]
 
