@@ -45,9 +45,7 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None, compute_power:bool = True):
 	batch_len = mu.shape[0]
 	image_shape = mu.shape[1:]
-	l = mu.shape[2]
-	
-	print('Start lll:')
+
 	if hasattr(W, '__padding'):
 		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape, padding=W.__padding)
 	else:
@@ -57,7 +55,7 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 		else:
 			gamma = torch.reshape(gamma,(batch_len,mu.shape[1],mu.shape[1]))
 
-	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax/Wmax # TODO columnwise validity ?
+	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax/Wmax # TODO automated test for columnwise validity
 	sigma_p = sigma / ct
 	sigma_c = sigma * math.sqrt(2) / ct
 
@@ -75,7 +73,7 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 	mu, gamma, gamma_shape = linear_layer_vec_batched(mu, gamma, W, sigma_c, r, gamma_shape=gamma_shape)
 
 	if hasattr(W, '__padding'):
-		mu = torch.reshape(mu, (batch_len,int(mu.numel()/batch_len//(l*l)),l,l))
+		mu = torch.reshape(mu, (batch_len,) + W.__output_shape[1:])
 		if gamma_shape is not None:
 			gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
 		else:
@@ -88,8 +86,6 @@ def k_linear_layer():
 
 
 def linear(module, data):
-	print('in lll')
-	print(data['mu'].shape)
 	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
 													    data['mu'],
 														data['gamma'],
@@ -99,8 +95,6 @@ def linear(module, data):
 														data['r'],
 														data['gamma_shape'],
 														compute_power=data['compute_power'])
-	print('out lll')
-	print(x.shape)
 	data['P_tot'] += P_tot_i
 	data['current_type'] = 'Linear'
 	data['mu'] = x
