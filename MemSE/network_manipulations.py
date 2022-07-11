@@ -97,8 +97,9 @@ def build_sequential_linear(conv):
     linear.weight.data = conv_fced
     linear.weight.__padding = conv.padding
     linear.weight.__stride = conv.stride
+    linear.weight.__output_shape = current_output_shape
     seq = nn.Sequential(
-        LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),  # is padding conv dependent ? i.e. should we grab params ?
+        LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),
         nn.Flatten(),
         linear,
         LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:])),
