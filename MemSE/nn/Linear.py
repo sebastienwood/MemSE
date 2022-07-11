@@ -42,7 +42,7 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def linear_layer_logic(W, mu, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None, compute_power:bool = True):
+def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None, compute_power:bool = True):
 	batch_len = mu.shape[0]
 	image_shape = mu.shape[1:]
 	l = mu.shape[2]
