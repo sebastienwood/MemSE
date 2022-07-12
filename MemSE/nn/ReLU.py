@@ -40,13 +40,14 @@ class ReLU_(MemSEAct):
     def main(module, data, mu, sigma_2, *args, **kwargs):
         DENOM = math.sqrt(2 * math.pi)
         SQRT_2 = math.sqrt(2)
+        sigma = torch.sqrt(sigma_2)
 
-        first_m = (sigma_2 / DENOM) * torch.exp(-torch.square(mu / sigma_2) / 2)
-        second_m = 0.5 * (1-torch.erf(-mu / (sigma_2 * SQRT_2)))
+        first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
+        second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
         mu_p = first_m + mu * second_m
 
         first_g = mu * first_m
-        second_g = (torch.square(sigma_2)+torch.square(mu)) * second_m
+        second_g = (sigma_2+torch.square(mu)) * second_m
         gamma_p = first_g + second_g - mu_p ** 2
         return mu_p, gamma_p
 

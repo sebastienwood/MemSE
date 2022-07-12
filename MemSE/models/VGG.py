@@ -1,7 +1,7 @@
 import torch.nn as nn
 import math
 
-__all__ = ['small_vgg', 'really_small_vgg', 'smallest_vgg']
+__all__ = ['small_vgg', 'really_small_vgg', 'smallest_vgg','small_vgg_ReLU', 'really_small_vgg_ReLU', 'smallest_vgg_ReLU']
 
 class VGG(nn.Module):
     def __init__(self, features, num_classes=1000):
@@ -74,6 +74,21 @@ def make_layers(cfg, batch_norm=False):
             in_channels = v
     return nn.Sequential(*layers)
 
+def make_layers_ReLU(cfg, batch_norm=False):
+    layers = []
+    in_channels = 3
+    for v in cfg:
+        if v == 'A':
+            layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
+        else:
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1, bias=False)
+            if batch_norm:
+                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU()]
+            else:
+                layers += [conv2d, nn.ReLU()]
+            in_channels = v
+    return nn.Sequential(*layers)
+
 
 cfg = {
     'small_vgg': [64, 'A', 128, 'A', 256, 'A', 512, 'A', 512, 'A'],
@@ -104,4 +119,29 @@ def smallest_vgg(**kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = VGG(make_layers(cfg['smallest_vgg'], batch_norm=False), **kwargs)
+    return model
+
+
+def small_vgg_ReLU(**kwargs):
+    """Small VGG model
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = VGG(make_layers_ReLU(cfg['small_vgg'], batch_norm=False), **kwargs)
+    return model
+
+def really_small_vgg_ReLU(**kwargs):
+    """Small VGG model
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = VGG(make_layers_ReLU(cfg['really_small_vgg'], batch_norm=False), **kwargs)
+    return model
+
+def smallest_vgg_ReLU(**kwargs):
+    """Small VGG model
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = VGG(make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False), **kwargs)
     return model

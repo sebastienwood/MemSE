@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import pytest
 import time
+from MemSE.models.VGG import smallest_vgg_ReLU
 from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, fuse_conv_bn
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma
-from MemSE.models import smallest_vgg, resnet18
+from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU
 
 torch.manual_seed(0)
 inp = torch.rand(2, 3, 9, 9)
@@ -17,6 +18,7 @@ conv = conv_factory()
 seq = nn.Sequential(conv,*[conv_factory() for _ in range(3)])
 
 smallest_vgg_ = smallest_vgg()
+smallest_vgg_ReLU_ = smallest_vgg_ReLU()
 resnet18_ = fuse_conv_bn(resnet18().eval(), 'resnet18')
 
 out = conv(inp)
@@ -138,3 +140,46 @@ def test_relu():
     memse = nn2memse(relu)
     mse_th, mse_sim = get_mses(memse, inp, relu(inp))
     assert torch.allclose(mse_th, mse_sim, rtol=0.1, atol=10)
+
+def test_vgg():
+    net = smallest_vgg_ReLU_
+    inp =  torch.rand(2, 3, 32, 32)
+    o = net(inp)
+    net = conv_to_unfolded(net, inp.shape[1:])
+    net.apply(lambda m: switch_conv2duf_impl(m, True))
+    o_uf = net(inp)
+    assert o.shape == o_uf.shape
+    assert torch.allclose(o, o_uf, rtol=1e-3)
+    quanter = MemristorQuant(net, std_noise=0.1)
+    memse = MemSE(net, quanter, input_bias=False)
+    mu, gamma, p_tot = memse.no_power_forward(inp)
+    mse_th = mse_gamma(o, mu, gamma)
+    mse_sim = memse.mse_sim(inp, o, reps=1e3)
+    #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
+    #print(means)
+    #print(varis)
+    #print('----------')
+    print(mse_th.mean())
+    print(mse_sim.mean())
+    print('MSE', ((mse_th - mse_sim) ** 2).mean())
+    assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
+
+def test_vgg_old_conv():
+    net = smallest_vgg_ReLU_
+    inp =  torch.rand(2, 3, 32, 32)
+    o = net(inp)
+    net = conv_to_fc(net, inp.shape[1:], verbose=False)
+    o_uf = net(inp)
+    assert o.shape == o_uf.shape
+    assert torch.allclose(o, o_uf, rtol=1e-3)
+    quanter = MemristorQuant(net, std_noise=0.02)
+    memse = MemSE(net, quanter, input_bias=False)
+    mu, gamma, p_tot = memse.no_power_forward(inp)
+    mse_th = mse_gamma(o, mu, gamma)
+    mse_sim = memse.mse_sim(inp, o, reps=1e3)
+    print(mse_th)
+    print(mse_sim)
+    print(mse_th.mean())
+    print(mse_sim.mean())
+    print('MSE', ((mse_th - mse_sim) ** 2).mean())
+    assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)   
