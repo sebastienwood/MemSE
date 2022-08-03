@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from .op import conv2duf_op
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
 class Conv2DUF(nn.Module):
@@ -44,6 +45,10 @@ class Conv2DUF(nn.Module):
 			return self.mse_var(conv2duf, memse_dict, ct, w, sigma)
 
 	@property
+	def kernel_size(self):
+		return self.c.kernel_size
+
+	@property
 	def padding(self):
 		return self.c.padding
 
@@ -77,13 +82,13 @@ class Conv2DUF(nn.Module):
 
 	@staticmethod
 	def memse(conv2duf: Conv2DUF, memse_dict):
-		batch_len = memse_dict['mu'].shape[0]
-		image_shape = memse_dict['mu'].shape[1:]
-		l = memse_dict['mu'].shape[2]
+		#batch_len = memse_dict['mu'].shape[0]
+		#image_shape = memse_dict['mu'].shape[1:]
+		#l = memse_dict['mu'].shape[2]
 		#mu, gamma, gamma_shape = padded_mu_gamma(memse_dict['mu'], memse_dict['gamma'], gamma_shape=memse_dict['gamma_shape'])
 		# TODO don't need these if using convolutions all the way (no need for prepad + reshape)
 		mu, gamma, gamma_shape = memse_dict['mu'], memse_dict['gamma'], memse_dict['gamma_shape']
-		ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax # Only one column at most (vector of weights)
+		ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax  # Only one column at most (vector of weights)
 
 		if memse_dict['compute_power']:
 			Gpos = torch.clip(conv2duf.original_weight, min=0)
@@ -116,12 +121,21 @@ class Conv2DUF(nn.Module):
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
 
 		gamma_diag = gamma_to_diag(gamma)
-		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * sigma ** 2 / c ** 2
+		c0 = sigma ** 2 / c ** 2
+		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * c0
 		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
-		first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
+		#first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 		
-		gamma = double_conv(gamma, weights, **conv2duf.conv_property_dict)
-		gamma_add_diag(gamma, first_comp)
+		###
+		# Trying stuff
+		###
+		#x_outer: torch.Tensor = (torch.einsum('bcij,bklm->bcijklm', memse_dict['mu'], memse_dict['mu']) + gamma) * sigma ** 2 / c ** 2
+		# x_outer diag is equivalent to first_comp (been tested)
+
+		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+		## working temp removed gamma_add_diag(gamma, first_comp)
+
+		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
 

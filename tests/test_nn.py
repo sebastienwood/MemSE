@@ -89,17 +89,17 @@ def test_conv2duf(net, slow):
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
 
 
-def test_conv2duf_mse_var(net):
-    conv2duf = Conv2DUF(conv, inp.shape, out.shape[1:])
+def test_conv2duf_mse_var():
+    conv2duf = conv_to_unfolded(conv, inp.shape[1:])
     quanter = MemristorQuant(conv2duf, std_noise=SIGMA)
     _ = MemSE.init_learnt_gmax(quanter)
     quanter.quant()
     ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
     start = time.time()
-    mu, gamma, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
+    mu, gamma, _ = Conv2DUF.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
     print(time.time()- start)
     start = time.time()
-    mu_slow, gamma_slow, _ = conv2duf.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
+    mu_slow, gamma_slow, _ = Conv2DUF.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
     print(time.time()- start)
     print('Reporting fast')
     print('MEAN', gamma.mean())
