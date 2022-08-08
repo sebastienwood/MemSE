@@ -18,7 +18,7 @@ from torch.autograd import Function
 from torch.utils.cpp_extension import load
 from torch.profiler import profile, record_function, ProfilerActivity
 from numba import njit, prange, cuda
-from stannum import Tube
+#from stannum import Tube
 
 
 TUBE = None
@@ -289,14 +289,14 @@ def conv2duf_taichi(input, gamma, mu, c, weight_shape):
     if TUBE is None:
         device = input.device # TODO dim alignment with -2, ...
         b = input.shape[0]
-        tube = Tube(device) \
-            .register_input_tensor((-1,)*7, input.dtype, "gamma", True) \
-            .register_input_tensor((-1,)*4, input.dtype, "mu", True) \
-            .register_input_tensor((-1,), input.dtype, "c", True) \
-            .register_output_tensor((-1,)*7, input.dtype, "input", True) \
-            .register_kernel(op_taichi, ["gamma", "mu", "c", "input"]) \
-            .finish()
-        TUBE = tube
+        # tube = Tube(device) \
+        #     .register_input_tensor((-1,)*7, input.dtype, "gamma", True) \
+        #     .register_input_tensor((-1,)*4, input.dtype, "mu", True) \
+        #     .register_input_tensor((-1,), input.dtype, "c", True) \
+        #     .register_output_tensor((-1,)*7, input.dtype, "input", True) \
+        #     .register_kernel(op_taichi, ["gamma", "mu", "c", "input"]) \
+        #     .finish()
+        # TUBE = tube
     return TUBE(gamma, mu, c, input, weight_shape[1], weight_shape[2], weight_shape[3])
 
 
