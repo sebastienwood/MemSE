@@ -125,12 +125,6 @@ class Conv2DUF(nn.Module):
 		first_comp = (gamma_diag + memse_dict['mu'] ** 2) * c0
 		first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
 		#first_comp += nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
-		
-		###
-		# Trying stuff
-		###
-		#x_outer: torch.Tensor = (torch.einsum('bcij,bklm->bcijklm', memse_dict['mu'], memse_dict['mu']) + gamma) * sigma ** 2 / c ** 2
-		# x_outer diag is equivalent to first_comp (been tested)
 
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
 		## working temp removed gamma_add_diag(gamma, first_comp)
