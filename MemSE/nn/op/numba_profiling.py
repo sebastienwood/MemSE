@@ -1,6 +1,6 @@
 import torch
 from numba import cuda
-from .conv2duf_op import conv2duf_op
+from conv2duf_op import conv2duf_op
 
 device = torch.device('cuda:0')
 wh = 32
