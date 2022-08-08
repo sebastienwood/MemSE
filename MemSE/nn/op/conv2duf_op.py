@@ -316,11 +316,9 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
         c = c.repeat(input.shape[1])
     assert weight_shape[1] == mu.shape[1]
     if input.device.type == "cpu":
-        print('cpu dispatch')
         input = Conv2DUF_op.apply(input, gamma, mu, c, weight_shape)
         return input
     else:
-        print('cuda dispatch')
         # TODO fidling with threads
         threadsperblock= (16,)# 4)
         blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
