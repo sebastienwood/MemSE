@@ -135,7 +135,7 @@ class Conv2DUF(nn.Module):
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
 		## working temp removed gamma_add_diag(gamma, first_comp)
 
-		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape)
+		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, conv2duf.stride)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
 
