@@ -16,68 +16,81 @@ ROOT_PRETRAINED = f'{ROOT}/MemSE/pretrained'
 
 
 def load_model(name: str, num_classes: int, input_shape, save_name=None, fuse: bool=True, cast_to_memristor: bool=True, **kwargs):
-	if save_name is None:
-		save_name = name
-	model = getattr(models, name)(num_classes=num_classes, **kwargs)
-	maybe_chkpt = Path(f'{ROOT}/MemSE/models/saves/{save_name}.pth')
-	if maybe_chkpt.exists():
-		print('Loading model checkpoint')
-		loaded = torch.load(maybe_chkpt, map_location=torch.device('cpu'))
-		rename_state_dict = loaded['state_dict'].copy()
-		for key in loaded['state_dict'].keys():
-			if "module." in key:
-				rename_state_dict[key.replace('module.', '')] = loaded['state_dict'][key]
-				rename_state_dict.pop(key)
-		loaded['state_dict'] = rename_state_dict
-		model.load_state_dict(loaded['state_dict'])
-	model.eval()
-	if fuse:
-		model = fuse_conv_bn(model, name)
-	if cast_to_memristor:
-		model = conv_to_fc(model, input_shape)
-	return model
+    """Load a Pytorch model with pretrained weight (if they exist), while fusing and casting operations to a Memristor friendly equivalent op.
+
+    Args:
+        name (str): the name of the model in MemSE.models
+        num_classes (int): _description_
+        input_shape (_type_): _description_
+        save_name (_type_, optional): if the saved weights differ from `name` (saves must be in the models/saves/ directory). Defaults to None.
+        fuse (bool, optional): attempt to fuse sequential linear operations. Defaults to True.
+        cast_to_memristor (bool, optional): attempt to cast operations to a memristor friendly format (convolution -> Linear or MemSE.Conv2DUF). Defaults to True.
+
+    Returns:
+        _type_: _description_
+    """
+    if save_name is None:
+        save_name = name
+    model = getattr(models, name)(num_classes=num_classes, **kwargs)
+    maybe_chkpt = Path(f'{ROOT}/MemSE/models/saves/{save_name}.pth')
+    if maybe_chkpt.exists():
+        print('Loading model checkpoint')
+        loaded = torch.load(maybe_chkpt, map_location=torch.device('cpu'))
+        rename_state_dict = loaded['state_dict'].copy()
+        for key in loaded['state_dict'].keys():
+            if "module." in key:
+                rename_state_dict[key.replace('module.', '')] = loaded['state_dict'][key]
+                rename_state_dict.pop(key)
+        loaded['state_dict'] = rename_state_dict
+        model.load_state_dict(loaded['state_dict'])
+    model.eval()
+    if fuse:
+        model = fuse_conv_bn(model, name)
+    if cast_to_memristor:
+        model = conv_to_fc(model, input_shape)
+    return model
 
 
 def load_memristor(model, name: str, mode: Union[WMAX_MODE, str], device, std_noise:float = 0.01, N:int = 128, save_name=None, **kwargs):
-	if isinstance(mode, str):
-		mode = WMAX_MODE[mode.upper()]
-	
-	if save_name is None:
-		save_name = name
+    if isinstance(mode, str):
+        mode = WMAX_MODE[mode.upper()]
+    
+    if save_name is None:
+        save_name = name
 
-	new_instance_kwargs = {}
-	kw_str = ''
-	if kwargs:
-		for k, v in kwargs.items():
-			kw_str += f'_{k}_{v}'
+    new_instance_kwargs = {}
+    kw_str = ''
+    if kwargs:
+        for k, v in kwargs.items():
+            kw_str += f'_{k}_{v}'
 
-			if k == 'post_processing':
-				new_instance_kwargs[k] = v
+            if k == 'post_processing':
+                new_instance_kwargs[k] = v
 
-	maybe_chkpt = Path(f'{ROOT_PRETRAINED}/{save_name}/{mode.name.lower()}{kw_str}.npy')
-	if 'gmax' in kwargs:
-		loaded = kwargs['gmax']
-	elif maybe_chkpt.exists():
-		print('Loading memristor config')
-		loaded = np.load(maybe_chkpt)
-	else:
-		loaded = None
+    maybe_chkpt = Path(f'{ROOT_PRETRAINED}/{save_name}/{mode.name.lower()}{kw_str}.npy')
+    if 'gmax' in kwargs:
+        loaded = kwargs['gmax']
+    elif maybe_chkpt.exists():
+        print('Loading memristor config')
+        loaded = np.load(maybe_chkpt)
+    else:
+        loaded = None
 
-	quanter = MemristorQuant(model, std_noise=std_noise, N=N, Gmax=loaded, wmax_mode=mode)
-	memse = MemSE(model, quanter, input_bias=None, **new_instance_kwargs).to(device)
-	
-	return memse
+    quanter = MemristorQuant(model, std_noise=std_noise, N=N, Gmax=loaded, wmax_mode=mode)
+    memse = MemSE(model, quanter, input_bias=None, **new_instance_kwargs).to(device)
+    
+    return memse
 
 
 def find_existing(name: str):
-	res = {}
-	path_dir = Path(f'{ROOT_PRETRAINED}/{name}/').glob('*.npy')
-	for path in path_dir:
-		to_parse = str(path)
-		splited = to_parse.split('_')
-		mode = splited[0]
-		if not mode in res:
-			res[mode] = []
-		res[mode].append({splited[i*2]: splited[(i*2)+1] for i in range((len(splited)-1) / 2)})
-	return res
-		
+    res = {}
+    path_dir = Path(f'{ROOT_PRETRAINED}/{name}/').glob('*.npy')
+    for path in path_dir:
+        to_parse = str(path)
+        splited = to_parse.split('_')
+        mode = splited[0]
+        if not mode in res:
+            res[mode] = []
+        res[mode].append({splited[i*2]: splited[(i*2)+1] for i in range((len(splited)-1) / 2)})
+    return res
+        

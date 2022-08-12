@@ -160,6 +160,7 @@ def record_shapes(model, x):
 @torch.no_grad()
 def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     assert impl in ['linear', 'unfolded']
+    assert not hasattr(model, '__memed'), 'This model has already been used in `conv_to_memristor`'
     if impl == 'linear':
         op = build_sequential_linear
     else:
@@ -184,6 +185,7 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
         print(model)
     assert torch.allclose(y, model(x), atol=1e-5), 'Linear transformation did not go well'
     model.train()
+    model.__memed = True
     return model
 
 
