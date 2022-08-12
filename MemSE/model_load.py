@@ -15,7 +15,7 @@ from typing import Union
 ROOT_PRETRAINED = f'{ROOT}/MemSE/pretrained'
 
 
-def load_model(name: str, num_classes: int, input_shape, save_name=None, **kwargs):
+def load_model(name: str, num_classes: int, input_shape, save_name=None, fuse: bool=True, cast_to_memristor: bool=True, **kwargs):
 	if save_name is None:
 		save_name = name
 	model = getattr(models, name)(num_classes=num_classes, **kwargs)
@@ -31,8 +31,10 @@ def load_model(name: str, num_classes: int, input_shape, save_name=None, **kwarg
 		loaded['state_dict'] = rename_state_dict
 		model.load_state_dict(loaded['state_dict'])
 	model.eval()
-	model = fuse_conv_bn(model, name)
-	model = conv_to_fc(model, input_shape)
+	if fuse:
+		model = fuse_conv_bn(model, name)
+	if cast_to_memristor:
+		model = conv_to_fc(model, input_shape)
 	return model
 
 
