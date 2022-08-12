@@ -11,7 +11,7 @@ from typing import List
 import math
 import numba
 import torch
-import taichi as ti
+#import taichi as ti
 from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Function
@@ -205,7 +205,6 @@ def op_slow(input, gamma, mu, c, weight_shape):
                                 for ii in range(weight_shape[2]):
                                     for ji in range(weight_shape[3]):
                                         input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
-                            #print(f'{bi=} {c0=} {i0=} {j0=} {i0p=} {j0p=} {input[bi, c0, i0, j0, c0, i0p, j0p]}')
     return input
 
 
@@ -223,7 +222,6 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
                                     v += (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
                         for c0 in range(input.shape[1]):
                             input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
-                            #print(f'{bi=} {c0=} {i0=} {j0=} {i0p=} {j0p=} {input[bi, c0, i0, j0, c0, i0p, j0p]}')
     return input
 
 
@@ -265,39 +263,39 @@ def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape
         bi += x_gridsize
 
 
-@ti.kernel
-def op_taichi(gamma: ti.template(), mu: ti.template(), c: ti.template(), input: ti.template(), weight_shape_1: int, weight_shape_2: int, weight_shape_3:int):
-    ti.block_local(c, mu, gamma)
-    for bi in range(input.shape[0]):
-        for i0 in range(input.shape[2]):
-            for j0 in range(input.shape[3]):
-                for i0p in range(input.shape[5]):
-                    for j0p in range(input.shape[6]):
-                        v = 0.
-                        for ci in ti.static(range(weight_shape_1)):
-                            for ii in ti.static(range(weight_shape_2)):
-                                for ji in ti.static(range(weight_shape_3)):
-                                    v += (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
-                        for c0 in ti.static(range(input.shape[1])):
-                            input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
+# @ti.kernel
+# def op_taichi(gamma: ti.template(), mu: ti.template(), c: ti.template(), input: ti.template(), weight_shape_1: int, weight_shape_2: int, weight_shape_3:int):
+#     ti.block_local(c, mu, gamma)
+#     for bi in range(input.shape[0]):
+#         for i0 in range(input.shape[2]):
+#             for j0 in range(input.shape[3]):
+#                 for i0p in range(input.shape[5]):
+#                     for j0p in range(input.shape[6]):
+#                         v = 0.
+#                         for ci in ti.static(range(weight_shape_1)):
+#                             for ii in ti.static(range(weight_shape_2)):
+#                                 for ji in ti.static(range(weight_shape_3)):
+#                                     v += (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
+#                         for c0 in ti.static(range(input.shape[1])):
+#                             input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
 
 
-def conv2duf_taichi(input, gamma, mu, c, weight_shape):
-    if c.dim() == 0:
-        c = c.repeat(input.shape[1])
-    global TUBE
-    if TUBE is None:
-        device = input.device # TODO dim alignment with -2, ...
-        b = input.shape[0]
-        # tube = Tube(device) \
-        #     .register_input_tensor((-1,)*7, input.dtype, "gamma", True) \
-        #     .register_input_tensor((-1,)*4, input.dtype, "mu", True) \
-        #     .register_input_tensor((-1,), input.dtype, "c", True) \
-        #     .register_output_tensor((-1,)*7, input.dtype, "input", True) \
-        #     .register_kernel(op_taichi, ["gamma", "mu", "c", "input"]) \
-        #     .finish()
-        # TUBE = tube
-    return TUBE(gamma, mu, c, input, weight_shape[1], weight_shape[2], weight_shape[3])
+# def conv2duf_taichi(input, gamma, mu, c, weight_shape):
+#     if c.dim() == 0:
+#         c = c.repeat(input.shape[1])
+#     global TUBE
+#     if TUBE is None:
+#         device = input.device # TODO dim alignment with -2, ...
+#         b = input.shape[0]
+#         # tube = Tube(device) \
+#         #     .register_input_tensor((-1,)*7, input.dtype, "gamma", True) \
+#         #     .register_input_tensor((-1,)*4, input.dtype, "mu", True) \
+#         #     .register_input_tensor((-1,), input.dtype, "c", True) \
+#         #     .register_output_tensor((-1,)*7, input.dtype, "input", True) \
+#         #     .register_kernel(op_taichi, ["gamma", "mu", "c", "input"]) \
+#         #     .finish()
+#         # TUBE = tube
+#     return TUBE(gamma, mu, c, input, weight_shape[1], weight_shape[2], weight_shape[3])
 
 
 class Conv2DUF_op(Function):
@@ -320,7 +318,7 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
         return input
     else:
         # TODO fidling with threads
-        threadsperblock= (16,)# 4)
+        threadsperblock= (32,)# 4)
         blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
         #blockspergrid_y = math.ceil(input.shape[1] / threadsperblock[1])
 

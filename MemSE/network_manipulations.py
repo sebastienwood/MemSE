@@ -265,7 +265,7 @@ def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
         # TODO should skip next iter if found, shouldn't happen with classical topologies
 
     #print(modules_to_fuse)
-    modules_to_fuse = MODELS_FUSION[model_name.lower()]
+    modules_to_fuse = MODELS_FUSION.get(model_name.lower(), None)
     if modules_to_fuse is not None:
         return torch.quantization.fuse_modules(model, modules_to_fuse)
     return model
