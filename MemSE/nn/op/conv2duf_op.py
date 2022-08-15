@@ -251,15 +251,53 @@ def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape
                     for j0p in range(input.shape[6]):
                         v = numba.float32(0.)
                         for ci in range(weight_shape_1):
-                            threadM = mu[bi, ci]
-                            threadG = gamma[bi, ci]
+                            # threadM = mu[bi, ci]
+                            # threadG = gamma[bi, ci]
                             for ii in range(weight_shape_2):
                                 for ji in range(weight_shape_3):
-                                    v += (threadM[i0+ii, j0+ji] * threadM[i0p+ii, j0p+ji] + threadG[i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
+                                    v += (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
                             #input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
+        bi += x_gridsize
+
+
+@cuda.jit
+def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3):
+    sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
+    bi, i0, j0 = cuda.grid(3)
+    x_gridsize, y_gridsize, z_gridsize = cuda.gridsize(3)
+    threadB = cuda.threadIdx.x
+
+    if threadB < c.shape[0]:
+        sharedC[threadB] = c[threadB]
+    if cuda.blockDim.x < c.shape[0] and threadB == 0:  # not covering all values
+        for i in range(cuda.blockDim.x, c.shape[0]):
+            sharedC[i] = c[i]
+
+    cuda.syncthreads()
+
+    if bi > input.shape[0] or i0 > input.shape[1] or j0 > input.shape[2]:
+        return
+
+    while bi < input.shape[0]:
+        while i0 < input.shape[1]:
+            while j0 < input.shape[2]:
+                # Iterate on io j0 i0p j0p
+                for i0p in range(input.shape[5]):
+                    for j0p in range(input.shape[6]):
+                        v = numba.float32(0.)
+                        for ci in range(weight_shape_1):
+                            for ii in range(weight_shape_2):
+                                for ji in range(weight_shape_3):
+                                    v += (mu[bi, ci, i0+ii, j0+ji] * mu[bi, ci, i0p+ii, j0p+ji] + gamma[bi, ci, i0+ii, j0+ji, ci, i0p+ii, j0p+ji])
+                        # For each c0 update input
+                        for c0 in range(input.shape[1]):
+                            #input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
+                            cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
+                j0 += z_gridsize
+            i0 += y_gridsize
         bi += x_gridsize
 
 
@@ -308,6 +346,10 @@ class Conv2DUF_op(Function):
         return grad_out
 
 
+def next_power_of_2(x):
+    return 1<<(x-1).bit_length()
+
+
 def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
     assert stride == 1, 'Stride != 1 not supported yet'
     if c.dim() == 0:
@@ -318,12 +360,20 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
         return input
     else:
         # TODO fidling with threads
-        threadsperblock= (32,)# 4)
-        blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
-        #blockspergrid_y = math.ceil(input.shape[1] / threadsperblock[1])
+        if input.shape[2] * input.shape[1] < input.shape[0]:
+            threadsperblock= (min(1024,next_power_of_2(input.shape[0])),)# 4)
+            blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
 
-        blockspergrid = (blockspergrid_x,)# blockspergrid_y)
-        op_numba_c[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3])
+            blockspergrid = (blockspergrid_x,)# blockspergrid_y)
+            op_numba_c[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3])
+        else:
+            threadsperblock= (8,8,8)# 4)
+            blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
+            blockspergrid_y = math.ceil(input.shape[1] / threadsperblock[1])
+            blockspergrid_z = math.ceil(input.shape[2] / threadsperblock[2])
+
+            blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
+            op_numba_c_f[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3])
         return input
 
 
