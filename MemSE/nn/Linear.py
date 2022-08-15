@@ -55,7 +55,7 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 		else:
 			gamma = torch.reshape(gamma,(batch_len,mu.shape[1],mu.shape[1]))
 
-	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax/Wmax # TODO automated test for columnwise validity
+	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax.to(mu.device)/Wmax.to(mu.device) # TODO automated test for columnwise validity
 	sigma_p = sigma / ct
 	sigma_c = sigma * math.sqrt(2) / ct
 
