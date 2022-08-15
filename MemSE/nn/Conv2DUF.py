@@ -21,7 +21,7 @@ class Conv2DUF(nn.Module):
 
 		self.output_shape = output_shape
 		#exemplar = self.unfold_input(torch.rand(input_shape))
-		self.register_parameter('original_weight', conv.weight.detach().clone())
+		self.register_parameter('original_weight', nn.Parameter(conv.weight.detach().clone()))
 		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
 		#self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
 		self.bias = conv.bias.detach().clone() if conv.bias is not None else None
