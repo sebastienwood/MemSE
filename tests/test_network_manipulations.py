@@ -30,7 +30,7 @@ if torch.cuda.is_available():
 @pytest.mark.parametrize("net", MODELS)
 def test_memristor_unfolded(device, net):
     y = record_shapes(net, inp).to(device)
-    conv2duf = conv_to_unfolded(net, inp.shape).to(device)
+    conv2duf = conv_to_unfolded(net, inp.shape, verbose=True).to(device)
     y_hat = conv2duf(inp.to(device))
     assert y.shape == y_hat.shape
     assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)

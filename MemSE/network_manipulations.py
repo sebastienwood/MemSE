@@ -158,14 +158,17 @@ def record_shapes(model, x):
     return y
 
 
+CONVERT = {
+    'linear': build_sequential_linear,
+    'unfolded': build_sequential_unfolded_linear
+}
+
+
 @torch.no_grad()
 def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     assert impl in ['linear', 'unfolded']
     assert not hasattr(model, '__memed'), 'This model has already been used in `conv_to_memristor`'
-    if impl == 'linear':
-        op = build_sequential_linear
-    else:
-        op = build_sequential_unfolded_linear
+    op = CONVERT.get(impl, 'unfolded')
     model = model.cpu()
     model = copy.deepcopy(model)
     model.eval()

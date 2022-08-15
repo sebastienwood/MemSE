@@ -26,10 +26,10 @@ class MemSEAct:
         d_mu = cls.derivatives(module, data, mu)
         ga_r = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu[1],d_mu[1],gamma)
         cls.gamma_extra_update(module, data, ga_r, d_mu)
-        ga_view = ga_r.view(ga_r.shape[0], ga_r.shape[1]*ga_r.shape[2]*ga_r.shape[3], -1)
+        ga_view = ga_r.reshape(ga_r.shape[0], ga_r.shape[1]*ga_r.shape[2]*ga_r.shape[3], -1)
 
         mu_p, gamma_p = cls.main(module, data, mu, sigma_2, d_mu)
-        ga_r = diagonal_replace(ga_view, gamma_p.view(*ga_view.diagonal(dim1=1, dim2=2).shape)).view(*ga_r.shape)
+        ga_r = diagonal_replace(ga_view, gamma_p.reshape(*ga_view.diagonal(dim1=1, dim2=2).shape)).view(*ga_r.shape)
 
         data['current_type'] = cls.__type__
         data['mu'] = mu_p

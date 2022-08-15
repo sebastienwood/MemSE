@@ -160,7 +160,7 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_z = math.ceil(input.shape[2] / threadsperblock[2])
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma, mu, c.detach(), weight_shape[1], weight_shape[2], weight_shape[3])
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3])
         return input
 
     @staticmethod

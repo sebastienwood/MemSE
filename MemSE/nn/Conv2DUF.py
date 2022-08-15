@@ -23,7 +23,10 @@ class Conv2DUF(nn.Module):
 		#exemplar = self.unfold_input(torch.rand(input_shape))
 		self.register_parameter('original_weight', nn.Parameter(conv.weight.detach().clone()))
 		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
-		self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone() if conv.bias is not None else None))
+		if conv.bias is not None:
+			self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
+		else:
+			self.bias = None
 
 	def change_impl(self, slow: bool = False):
 		self.__slow = slow
@@ -34,6 +37,9 @@ class Conv2DUF(nn.Module):
 		out_unf = inp_unf.transpose(1, 2).matmul(self.weight.to(x)).transpose(1, 2)
 		out = out_unf.view(x.shape[0], *self.output_shape)
 		if self.bias is not None:
+			print(out.shape)
+			print(self.bias.shape)
+			print(self.bias)
 			out += self.bias[:, None, None]
 		return out
 
