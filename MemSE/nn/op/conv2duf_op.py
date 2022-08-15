@@ -146,6 +146,7 @@ class Conv2DUF_op(Function):
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
     def forward(ctx, input, gamma, mu, c, weight_shape):
+        cuda.select_device(int(str(input.device).split(':')[1]))
         # TODO fidling with threads
         if input.shape[2] * input.shape[1] < input.shape[0]:
             threadsperblock= (min(1024,next_power_of_2(input.shape[0])),)# 4)
