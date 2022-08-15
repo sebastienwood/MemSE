@@ -6,7 +6,7 @@ if CUDASIM:
 
 import os
 import timeit
-from typing import List
+from typing import List, Tuple
 
 import math
 import numba
@@ -110,12 +110,12 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
 
     cuda.syncthreads()
 
-    if bi > input.shape[0] or i0 > input.shape[1] or j0 > input.shape[2]:
+    if bi > input.shape[0] or i0 > input.shape[2] or j0 > input.shape[3]:
         return
 
     while bi < input.shape[0]:
-        while i0 < input.shape[1]:
-            while j0 < input.shape[2]:
+        while i0 < input.shape[2]:
+            while j0 < input.shape[3]:
                 # Iterate on io j0 i0p j0p
                 for i0p in range(input.shape[5]):
                     for j0p in range(input.shape[6]):
@@ -156,8 +156,8 @@ class Conv2DUF_op_CUDA(Function):
         else:
             threadsperblock= (8,8,8)# 4)
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
-            blockspergrid_y = math.ceil(input.shape[1] / threadsperblock[1])
-            blockspergrid_z = math.ceil(input.shape[2] / threadsperblock[2])
+            blockspergrid_y = math.ceil(input.shape[2] / threadsperblock[1])
+            blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
             op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3])
@@ -172,7 +172,7 @@ def next_power_of_2(x):
     return 1<<(x-1).bit_length()
 
 
-def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
+def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1)):
     assert all(s == 1 for s in stride), 'Stride != 1 not supported yet'
     if c.dim() == 0:
         c = c.repeat(input.shape[1])
@@ -187,10 +187,10 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
 
 if __name__ == '__main__':
     slow_compare = False
-    wh = 4
+    wh = 32
     who = wh - 2
-    ch = 2
-    bs = 2
+    ch = 3
+    bs = 32
 
     input = torch.rand(bs, ch, who, who, ch, who, who)
     gamma = torch.rand(bs, ch, wh, wh, ch, wh, wh)
@@ -219,8 +219,6 @@ if __name__ == '__main__':
         nb = conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape)
         print('CANDIDATE MEAN IS')
         print(nb.mean())
-        print(ref[0])
-        print(nb[0])
         assert torch.allclose(ref, nb.to(ref))
         print('WITH TIMING')
         print(timeit.timeit(lambda: conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape), number=5))
@@ -231,10 +229,10 @@ if __name__ == '__main__':
         # assert torch.allclose(ref, tai)
         # print(timeit.timeit(lambda: conv2duf_taichi(input.clone(), gamma, mu, c, weight_shape), number=5))
 
-    device = torch.device('cuda:0')
-    with profile(activities=[ProfilerActivity.CUDA], profile_memory=True) as prof:
-        with record_function("op"):
-            conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape)
-    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-    prof.export_chrome_trace("trace.json")
+    # device = torch.device('cuda:0')
+    # with profile(activities=[ProfilerActivity.CUDA], profile_memory=True) as prof:
+    #     with record_function("op"):
+    #         conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape)
+    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+    # prof.export_chrome_trace("trace.json")
