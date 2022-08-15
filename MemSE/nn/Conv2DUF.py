@@ -23,8 +23,7 @@ class Conv2DUF(nn.Module):
 		#exemplar = self.unfold_input(torch.rand(input_shape))
 		self.register_parameter('original_weight', nn.Parameter(conv.weight.detach().clone()))
 		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
-		#self.weight = torch.repeat_interleave(self.weight, exemplar.shape[-1], dim=0)
-		self.bias = conv.bias.detach().clone() if conv.bias is not None else None
+		self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone() if conv.bias is not None else None))
 
 	def change_impl(self, slow: bool = False):
 		self.__slow = slow
@@ -32,7 +31,7 @@ class Conv2DUF(nn.Module):
 	def forward(self, x):
 		inp_unf = self.unfold_input(x)
 		#out_unf = torch.einsum('bfp,pfc->bcp', inp_unf, self.weight)
-		out_unf = inp_unf.transpose(1, 2).matmul(self.weight).transpose(1, 2)
+		out_unf = inp_unf.transpose(1, 2).matmul(self.weight.to(x)).transpose(1, 2)
 		out = out_unf.view(x.shape[0], *self.output_shape)
 		if self.bias is not None:
 			out += self.bias[:, None, None]
@@ -118,7 +117,7 @@ class Conv2DUF(nn.Module):
 	@staticmethod
 	def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights, sigma):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
-		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'])
+		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'], device=mu.device, dtype=mu.dtype)
 
 		gamma_diag = gamma_to_diag(gamma)
 		c0 = sigma ** 2 / c ** 2

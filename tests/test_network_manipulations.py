@@ -21,26 +21,32 @@ MODELS = [
     smallest_vgg_ReLU_
 ]
 
+devices = ['cpu']
+if torch.cuda.is_available():
+    devices.append('cuda')
 
+
+@pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("net", MODELS)
-def test_memristor_unfolded(net):
-    y = record_shapes(net, inp)
-    conv2duf = conv_to_unfolded(net, inp.shape)
-    y_hat = conv2duf(inp)
+def test_memristor_unfolded(device, net):
+    y = record_shapes(net, inp).to(device)
+    conv2duf = conv_to_unfolded(net, inp.shape).to(device)
+    y_hat = conv2duf(inp.to(device))
+    assert y.shape == y_hat.shape
+    assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
+    quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
+    memse = MemSE(conv2duf, quanter, input_bias=False)#.to(device)
+    memse.no_power_forward(inp.to(device))
+
+
+@pytest.mark.parametrize("device", devices)
+@pytest.mark.parametrize("net", MODELS)
+def test_memristor_large(device, net):
+    y = record_shapes(net, inp).to(device)
+    conv2duf = conv_to_fc(net, inp.shape).to(device)
+    y_hat = conv2duf(inp.to(device))
     assert y.shape == y_hat.shape
     assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
     quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
     memse = MemSE(conv2duf, quanter, input_bias=False)
-    memse.no_power_forward(inp)
-
-
-@pytest.mark.parametrize("net", MODELS)
-def test_memristor_large(net):
-    y = record_shapes(net, inp)
-    conv2duf = conv_to_fc(net, inp.shape)
-    y_hat = conv2duf(inp)
-    assert y.shape == y_hat.shape
-    assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
-    quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
-    memse = MemSE(conv2duf, quanter, input_bias=False)
-    memse.no_power_forward(inp)
+    memse.no_power_forward(inp.to(device))

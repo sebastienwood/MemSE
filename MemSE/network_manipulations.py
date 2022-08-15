@@ -98,12 +98,13 @@ def build_sequential_linear(conv):
     linear.weight.__padding = conv.padding
     linear.weight.__stride = conv.stride
     linear.weight.__output_shape = current_output_shape
+    linear.register_parameter('__bias', conv.bias)
     seq = nn.Sequential(
         LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),
         nn.Flatten(),
         linear,
         LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:])),
-        LambdaLayer(lambda x: torch.add(x, conv.bias[:, None, None]) if conv.bias is not None else x)
+        LambdaLayer(lambda x: torch.add(x, linear.__bias[:, None, None]) if conv.bias is not None else x)
     )
     rand_y_repl = seq(rand_x)
     # print(rand_y.shape)

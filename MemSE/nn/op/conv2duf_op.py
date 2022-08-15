@@ -143,21 +143,11 @@ class Conv2DUF_op(Function):
         return grad_out
 
 
-def next_power_of_2(x):
-    return 1<<(x-1).bit_length()
-
-
-def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
-    assert stride == 1, 'Stride != 1 not supported yet'
-    if c.dim() == 0:
-        c = c.repeat(input.shape[1])
-    assert weight_shape[1] == mu.shape[1]
-    if input.device.type == "cpu":
-        input = Conv2DUF_op.apply(input, gamma, mu, c, weight_shape)
-        return input
-    else:
+class Conv2DUF_op_CUDA(Function):
+    @staticmethod
+    def forward(ctx, input, gamma, mu, c, weight_shape):
         # TODO fidling with threads
-        if True or input.shape[2] * input.shape[1] < input.shape[0]:
+        if input.shape[2] * input.shape[1] < input.shape[0]:
             threadsperblock= (min(1024,next_power_of_2(input.shape[0])),)# 4)
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
 
@@ -170,7 +160,28 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
             blockspergrid_z = math.ceil(input.shape[2] / threadsperblock[2])
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            op_numba_c_f[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3])
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma, mu, c.detach(), weight_shape[1], weight_shape[2], weight_shape[3])
+        return input
+
+    @staticmethod
+    def backward(ctx, grad_out):
+        return grad_out
+
+
+def next_power_of_2(x):
+    return 1<<(x-1).bit_length()
+
+
+def conv2duf_op(input, gamma, mu, c, weight_shape, stride: int=1):
+    assert all(s == 1 for s in stride), 'Stride != 1 not supported yet'
+    if c.dim() == 0:
+        c = c.repeat(input.shape[1])
+    assert weight_shape[1] == mu.shape[1]
+    if input.device.type == "cpu":
+        input = Conv2DUF_op.apply(input, gamma, mu, c, weight_shape)
+        return input
+    else:
+        input = Conv2DUF_op_CUDA.apply(input, gamma, mu, c.to(input), weight_shape)
         return input
 
 
