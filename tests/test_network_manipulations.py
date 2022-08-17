@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 import pytest
 
 from MemSE.network_manipulations import build_sequential_linear, conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
@@ -25,30 +26,23 @@ devices = ['cpu']
 if torch.cuda.is_available():
     devices.append('cuda')
 
+METHODS = [conv_to_unfolded, conv_to_fc]
 
+SIGMA = np.logspace(-1,-3,3).tolist()
+
+
+@pytest.mark.parametrize("method", METHODS)
 @pytest.mark.parametrize("device", devices)
 @pytest.mark.parametrize("net", MODELS)
-def test_memristor_unfolded(device, net):
+@pytest.mark.parametrize("sigma", SIGMA)
+def test_memristor_manips(method, device, net, sigma):
     y = record_shapes(net, inp).to(device)
-    conv2duf = conv_to_unfolded(net, inp.shape, verbose=True).to(device)
+    conv2duf = method(net, inp.shape).to(device)
     y_hat = conv2duf(inp.to(device))
     assert y.shape == y_hat.shape
     assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
-    quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
+    quanter = MemristorQuant(conv2duf, std_noise=sigma, Gmax = 3.268, N=128)
     memse = MemSE(conv2duf, quanter, input_bias=False)#.to(device)
-    m, _, _ = memse.no_power_forward(inp.to(device))
+    m, g, p = memse.no_power_forward(inp.to(device))
     assert not torch.any(torch.isnan(m))
-
-
-@pytest.mark.parametrize("device", devices)
-@pytest.mark.parametrize("net", MODELS)
-def test_memristor_large(device, net):
-    y = record_shapes(net, inp).to(device)
-    conv2duf = conv_to_fc(net, inp.shape).to(device)
-    y_hat = conv2duf(inp.to(device))
-    assert y.shape == y_hat.shape
-    assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
-    quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
-    memse = MemSE(conv2duf, quanter, input_bias=False)
-    m, _, _ = memse.no_power_forward(inp.to(device))
-    assert not torch.any(torch.isnan(m))
+    assert not torch.any(torch.isnan(g))
