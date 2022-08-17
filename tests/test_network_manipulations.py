@@ -8,8 +8,9 @@ from MemSE.nn import Conv2DUF
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU
 from MemSE import MemristorQuant, MemSE
 
+BATCH_SIZE = 2
 torch.manual_seed(0)
-inp = torch.rand(2,3,32,32)
+inp = torch.rand(BATCH_SIZE,3,32,32)
 conv = nn.Conv2d(3,3,2)
 smallest_vgg_ = smallest_vgg()
 smallest_vgg_ReLU_ = smallest_vgg_ReLU()
