@@ -36,7 +36,8 @@ def test_memristor_unfolded(device, net):
     assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
     quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
     memse = MemSE(conv2duf, quanter, input_bias=False)#.to(device)
-    memse.no_power_forward(inp.to(device))
+    m, _, _ = memse.no_power_forward(inp.to(device))
+    assert not torch.any(torch.isnan(m))
 
 
 @pytest.mark.parametrize("device", devices)
@@ -49,4 +50,5 @@ def test_memristor_large(device, net):
     assert torch.allclose(y, y_hat, rtol=1e-3, atol=1e-6)
     quanter = MemristorQuant(conv2duf, std_noise=0.01, Gmax = 3.268, N=100000)
     memse = MemSE(conv2duf, quanter, input_bias=False)
-    memse.no_power_forward(inp.to(device))
+    m, _, _ = memse.no_power_forward(inp.to(device))
+    assert not torch.any(torch.isnan(m))

@@ -37,9 +37,6 @@ class Conv2DUF(nn.Module):
 		out_unf = inp_unf.transpose(1, 2).matmul(self.weight.to(x)).transpose(1, 2)
 		out = out_unf.view(x.shape[0], *self.output_shape)
 		if self.bias is not None:
-			print(out.shape)
-			print(self.bias.shape)
-			print(self.bias)
 			out += self.bias[:, None, None]
 		return out
 
@@ -134,7 +131,7 @@ class Conv2DUF(nn.Module):
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
 		## working temp removed gamma_add_diag(gamma, first_comp)
 
-		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, stride=conv2duf.stride)
+		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None
 
