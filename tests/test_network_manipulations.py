@@ -7,20 +7,20 @@ from MemSE.network_manipulations import build_sequential_linear, conv_to_fc, con
 from MemSE.nn import Conv2DUF
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU
 from MemSE import MemristorQuant, MemSE
+from MemSE.dataset import get_dataloader
 
 BATCH_SIZE = 2
 torch.manual_seed(0)
-inp = torch.rand(BATCH_SIZE,3,32,32)
-conv = nn.Conv2d(3,3,2)
-smallest_vgg_ = smallest_vgg()
-smallest_vgg_ReLU_ = smallest_vgg_ReLU()
-resnet18_ = fuse_conv_bn(resnet18().eval(), 'resnet18')
+#inp = torch.rand(BATCH_SIZE,3,32,32)
+
+_, _, test_loader, _, _ = get_dataloader('cifar10', root='./data', bs=BATCH_SIZE)
+inp = next(iter(test_loader))[0]
 
 MODELS = [
-    conv,
-    smallest_vgg_,
-    resnet18_,
-    smallest_vgg_ReLU_
+    nn.Conv2d(3,3,2),
+    smallest_vgg(),
+    fuse_conv_bn(resnet18().eval(), 'resnet18'),
+    smallest_vgg_ReLU()
 ]
 
 devices = ['cpu']

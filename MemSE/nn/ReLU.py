@@ -5,6 +5,10 @@ from MemSE.nn.MemSEAct import MemSEAct
 from MemSE.nn.utils import diagonal_replace
 
 
+DENOM = math.sqrt(2 * math.pi)
+SQRT_2 = math.sqrt(2)
+
+
 def relu(module, data):
     mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
     gamma_view = gamma.view(gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
@@ -32,23 +36,32 @@ def relu(module, data):
     data['mu'] = mu_p
     data['gamma'] = ga_r
     data['gamma_shape'] = gamma_shape
+    
 
-
+import numpy as np
 class ReLU_(MemSEAct):
     __type__ = 'ReLU'
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
-        DENOM = math.sqrt(2 * math.pi)
-        SQRT_2 = math.sqrt(2)
         sigma = torch.sqrt(sigma_2)
+        # TODO
+        # séparer positifs et nuls
+        # pour le spositifs -> calculs
+        # pour les nuls -> mu_p = relu(mu)
+        # pour gamma_p les nuls -> 0
 
         first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
         second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
+
         mu_p = first_m + mu * second_m
 
         first_g = mu * first_m
         second_g = (sigma_2+torch.square(mu)) * second_m
         gamma_p = first_g + second_g - mu_p ** 2
+
+        mu_p = torch.where(sigma > 0, mu_p, torch.relu(mu))
+        gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
+        
         return mu_p, gamma_p
 
     @classmethod
