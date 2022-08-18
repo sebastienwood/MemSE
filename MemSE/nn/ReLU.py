@@ -44,7 +44,7 @@ class ReLU_(MemSEAct):
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
         sigma = torch.sqrt(sigma_2)
-        # TODO
+
         # séparer positifs et nuls
         # pour le spositifs -> calculs
         # pour les nuls -> mu_p = relu(mu)

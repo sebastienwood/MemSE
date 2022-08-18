@@ -230,30 +230,34 @@ def get_intermediates(model, input):
     [h.remove() for h in hooks.values()]
 
 
-def store_add_intermediates_se(model):
+def store_add_intermediates_mse(model, reps):
     hooks = {}
     @torch.no_grad()
     def hook_fn(self, input, output):
-        se = (output.clone().detach().cpu() - self.__original_output) ** 2
+        se = (output.clone().detach().cpu() - self.__original_output) ** 2 / reps
         if not hasattr(self, '__se_output'):
             self.__se_output = se
-            self.__th_output = output.clone().detach().cpu()
+            self.__th_output = output.clone().detach().cpu() / reps
         else:
             self.__se_output += se
-            self.__th_output += output.clone().detach().cpu()
+            self.__th_output += output.clone().detach().cpu() / reps
     for name, module in model.named_modules():
         hooks[name] = module.register_forward_hook(hook_fn)
     return hooks
 
 
 def store_add_intermediates_var(model, reps):
+    # TODO unbiased var estimates suggest we should have (reps - 1), it was debated 
     hooks = {}
     @torch.no_grad()
     def hook_fn(self, input, output):
+        base = (output.clone().detach().cpu() - self.__th_output)
         if not hasattr(self, '__var_output'):
-            self.__var_output = (output.clone().detach().cpu() - self.__th_output / reps) ** 2
+            self.__var_output = base ** 2 / reps
+            self.__cov_output = torch.einsum('i, j -> ij', base.view(-1), base.view(-1)).view(base.shape + base.shape[1:]) / reps
         else:
-            self.__var_output += (output.clone().detach().cpu() - self.__th_output / reps) ** 2
+            self.__var_output += base ** 2 / reps
+            self.__cov_output += torch.einsum('i, j -> ij', base.view(-1), base.view(-1)).view(base.shape + base.shape[1:]) / reps
     for name, module in model.named_modules():
         hooks[name] = module.register_forward_hook(hook_fn)
     return hooks

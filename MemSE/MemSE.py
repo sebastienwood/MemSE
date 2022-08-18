@@ -8,7 +8,7 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 
 from MemSE.MemristorQuant import MemristorQuant
-from MemSE.network_manipulations import get_intermediates, store_add_intermediates_se, store_add_intermediates_var
+from MemSE.network_manipulations import get_intermediates, store_add_intermediates_mse, store_add_intermediates_var
 from MemSE.utils import net_param_iterator
 from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
 from MemSE.definitions import SUPPORTED_OPS
@@ -122,7 +122,7 @@ class MemSE(nn.Module):
 		self.quant(c_one=False)
 
 		# MU COMPUTATION
-		hooks = store_add_intermediates_se(self.model)
+		hooks = store_add_intermediates_mse(self.model, reps)
 		for _ in range(reps):
 			self.forward_noisy(x)
 		[h.remove() for h in hooks.values()]
@@ -138,6 +138,7 @@ class MemSE(nn.Module):
 		mses = {'sim': {}, 'us': {}}
 		means = {'sim': {}, 'us': {}}
 		varis = {'sim': {}, 'us': {}}
+		covs = {'sim': {}, 'us': {}}
 
 		data = { # TODO this could be managed in a distinct function
 			'mu': x,
@@ -155,9 +156,10 @@ class MemSE(nn.Module):
 			if type(s) not in SUPPORTED_OPS:
 				continue
 			if hasattr(s, '__se_output'):
-				mse_output = getattr(s, '__se_output') / reps
-				th_output = getattr(s, '__th_output') / reps
-				va_output = getattr(s, '__var_output') / (reps) # TODO y'a un - 1 en fait mais Johny John est pas content
+				mse_output = getattr(s, '__se_output') 
+				th_output = getattr(s, '__th_output') 
+				va_output = getattr(s, '__var_output') 
+				cov_output = getattr(s, '__cov_output')
 				original_output = getattr(s, '__original_output').to(x.device)
 				if type(s) not in mses['sim']:
 					for t in ['sim', 'us']:
@@ -174,7 +176,9 @@ class MemSE(nn.Module):
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
-		return mses, means, varis
+				covs['sim'].get(type(s)).update({idx: cov_output.mean().detach().cpu().numpy()})
+				covs['us'].get(type(s)).update({idx: data['gamma'].mean().detach().cpu().numpy()})
+		return mses, means, varis, covs
 
 
 	def quant(self, c_one=True):
