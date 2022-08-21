@@ -92,7 +92,6 @@ def build_sequential_linear(conv):
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
     conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding, conv.stride)
-    # print(conv_fced.shape)
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
     linear.weight.data = conv_fced
     linear.weight.__padding = conv.padding
@@ -107,11 +106,6 @@ def build_sequential_linear(conv):
         LambdaLayer(lambda x: torch.add(x, linear.__bias[:, None, None]) if conv.bias is not None else x)
     )
     rand_y_repl = seq(rand_x)
-    # print(rand_y.shape)
-    # print(rand_y)
-    # print('*'*15)
-    # print(rand_y_repl.shape)
-    # print(rand_y_repl)
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
     return seq
 
@@ -139,7 +133,7 @@ def replace_op(model, fx, old_module=torch.nn.Conv2d):
         if type(module) in old_module:
             new_fc = fx(module)
             new_modules[name] = new_fc
-    if len(list(model.modules())) == 1:
+    if len(list(model.modules())) == 1 and len(new_modules) == 1:
         return new_modules.popitem()[1]
     [recursive_setattr(model, n, fc) for n, fc in new_modules.items()]
     return model
@@ -252,12 +246,14 @@ def store_add_intermediates_var(model, reps):
     @torch.no_grad()
     def hook_fn(self, input, output):
         base = (output.clone().detach().cpu() - self.__th_output)
+        flattened = base.reshape(base.shape[0], -1)
+        covs = torch.einsum('bi, bj -> bij', flattened, flattened).view(base.shape + base.shape[1:]) / reps
         if not hasattr(self, '__var_output'):
             self.__var_output = base ** 2 / reps
-            self.__cov_output = torch.einsum('i, j -> ij', base.view(-1), base.view(-1)).view(base.shape + base.shape[1:]) / reps
+            self.__cov_output = covs
         else:
             self.__var_output += base ** 2 / reps
-            self.__cov_output += torch.einsum('i, j -> ij', base.view(-1), base.view(-1)).view(base.shape + base.shape[1:]) / reps
+            self.__cov_output += covs
     for name, module in model.named_modules():
         hooks[name] = module.register_forward_hook(hook_fn)
     return hooks

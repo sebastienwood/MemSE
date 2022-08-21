@@ -65,31 +65,8 @@ def switch_conv2duf_impl(m, slow):
         m.change_impl(slow)
 
 
-@pytest.mark.parametrize("net", MODELS)
-@pytest.mark.parametrize("slow", [True, False])
-def test_conv2duf(net, slow):
-    o = net(inp)
-    net = conv_to_unfolded(net, inp.shape[1:])
-    net.apply(lambda m: switch_conv2duf_impl(m, slow))
-    o_uf = net(inp)
-    assert o.shape == o_uf.shape
-    assert torch.allclose(o, o_uf, rtol=1e-3)
-    quanter = MemristorQuant(net, std_noise=0.1)
-    memse = MemSE(net, quanter, input_bias=False)
-    mu, gamma, p_tot = memse.no_power_forward(inp)
-    mse_th = mse_gamma(o, mu, gamma)
-    mse_sim = memse.mse_sim(inp, o, reps=1e5)
-    #mses, means, varis = memse.mse_forward(inp, compute_power=False, reps=1e4)
-    #print(means)
-    #print(varis)
-    #print('----------')
-    print(mse_th.mean())
-    print(mse_sim.mean())
-    print('MSE', ((mse_th - mse_sim) ** 2).mean())
-    assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)
-
-
 def test_conv2duf_mse_var():
+    # TODO remove this test once slow == fast
     conv2duf = conv_to_unfolded(conv, inp.shape[1:])
     quanter = MemristorQuant(conv2duf, std_noise=SIGMA)
     _ = MemSE.init_learnt_gmax(quanter)

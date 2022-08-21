@@ -166,6 +166,7 @@ class MemSE(nn.Module):
 						mses[t].update({type(s): {}})
 						means[t].update({type(s): {}})
 						varis[t].update({type(s): {}})
+						covs[t].update({type(s): {}})
 				mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
 				means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
 				means['us'].get(type(s)).update({idx: data['mu'].mean().detach().cpu().numpy()})
