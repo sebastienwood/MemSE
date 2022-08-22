@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import opt_einsum as oe
@@ -20,12 +21,33 @@ def mse_gamma(tar, mu, gamma, verbose: bool = False):
 	return exp + vari
 
 
-def diagonal_replace(tensor, diagonal):
-	'''Backprop compatible diagonal replacement
-	'''
-	mask = torch.diag(torch.ones(diagonal.shape[1:], device=tensor.device)).unsqueeze_(0)
+def diagonal_replace(tensor, diagonal, backprop:bool=False):
+	"""Backprop compatible diagonal replacement
+
+	Args:
+		tensor (_type_): _description_
+		diagonal (_type_): a 1D `torch.Tensor` replacing `tensor` diagonal elements
+		backprop (bool, optional): _description_. Defaults to False.
+
+	Returns:
+		_type_: _description_
+	"""
+	diag_ones = torch.ones(diagonal.shape[1:], device=tensor.device)
+	mask = torch.diag(diag_ones).unsqueeze_(0)
+	if backprop:
+		mask *= .99
 	out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
 	return out
+
+
+def zero_diag(tensor):
+	if len(tensor.shape) > 2:
+		original_shape = tensor.shape
+		half = int(math.sqrt(tensor.numel()/tensor.shape[0]))
+		tensor = tensor.view(tensor.shape[0], half, half)
+	diag = torch.zeros(torch.diagonal(tensor, dim1=1, dim2=2).shape, device=tensor.device)
+	res = diagonal_replace(tensor, diag)
+	return res.view(original_shape)
 
 
 def zero_but_diag_(tensor):

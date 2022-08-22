@@ -9,6 +9,7 @@ from prettytable import PrettyTable
 
 from MemSE.MemristorQuant import MemristorQuant
 from MemSE.network_manipulations import get_intermediates, store_add_intermediates_mse, store_add_intermediates_var
+from MemSE.nn.utils import zero_diag
 from MemSE.utils import net_param_iterator
 from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
 from MemSE.definitions import SUPPORTED_OPS
@@ -177,8 +178,8 @@ class MemSE(nn.Module):
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
-				covs['sim'].get(type(s)).update({idx: cov_output.mean().detach().cpu().numpy()})
-				covs['us'].get(type(s)).update({idx: data['gamma'].mean().detach().cpu().numpy()})
+				covs['sim'].get(type(s)).update({idx: zero_diag(cov_output).mean().detach().cpu().numpy()})
+				covs['us'].get(type(s)).update({idx: zero_diag(data['gamma']).mean().detach().cpu().numpy()})
 		return mses, means, varis, covs
 
 
