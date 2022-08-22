@@ -113,7 +113,7 @@ class MemSE(nn.Module):
 	def no_power_forward(self, x):
 		return self.forward(x, False)
 
-	def mse_forward(self, x, reps: int = 1000, compute_power: bool = True):
+	def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False):
 		reps = int(reps)
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
@@ -129,7 +129,7 @@ class MemSE(nn.Module):
 		[h.remove() for h in hooks.values()]
 
 		# VAR COMPUTATION
-		hooks = store_add_intermediates_var(self.model, reps)
+		hooks = store_add_intermediates_var(self.model, reps, compute_cov=compute_cov)
 		for _ in range(reps):
 			self.forward_noisy(x)
 		[h.remove() for h in hooks.values()]
@@ -157,10 +157,11 @@ class MemSE(nn.Module):
 			if type(s) not in SUPPORTED_OPS:
 				continue
 			if hasattr(s, '__se_output'):
-				mse_output = getattr(s, '__se_output') 
-				th_output = getattr(s, '__th_output') 
-				va_output = getattr(s, '__var_output') 
-				cov_output = getattr(s, '__cov_output')
+				mse_output = getattr(s, '__se_output')
+				th_output = getattr(s, '__th_output')
+				va_output = getattr(s, '__var_output')
+				if compute_cov:
+					cov_output = getattr(s, '__cov_output')
 				original_output = getattr(s, '__original_output').to(x.device)
 				if type(s) not in mses['sim']:
 					for t in ['sim', 'us']:
@@ -178,8 +179,9 @@ class MemSE(nn.Module):
 				mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
-				covs['sim'].get(type(s)).update({idx: zero_diag(cov_output).mean().detach().cpu().numpy()})
-				covs['us'].get(type(s)).update({idx: zero_diag(data['gamma']).mean().detach().cpu().numpy()})
+				if compute_cov:
+					covs['sim'].get(type(s)).update({idx: zero_diag(cov_output).mean().detach().cpu().numpy()})
+					covs['us'].get(type(s)).update({idx: zero_diag(data['gamma']).mean().detach().cpu().numpy()})
 		return mses, means, varis, covs
 
 

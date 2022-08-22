@@ -240,20 +240,23 @@ def store_add_intermediates_mse(model, reps):
     return hooks
 
 
-def store_add_intermediates_var(model, reps):
+def store_add_intermediates_var(model, reps, compute_cov: bool = False):
     # TODO unbiased var estimates suggest we should have (reps - 1), it was debated 
     hooks = {}
     @torch.no_grad()
     def hook_fn(self, input, output):
         base = (output.clone().detach().cpu() - self.__th_output)
-        flattened = base.reshape(base.shape[0], -1)
-        covs = torch.einsum('bi, bj -> bij', flattened, flattened).view(base.shape + base.shape[1:]) / reps
+        if compute_cov:
+            flattened = base.reshape(base.shape[0], -1)
+            covs = torch.einsum('bi, bj -> bij', flattened, flattened).view(base.shape + base.shape[1:]) / reps
         if not hasattr(self, '__var_output'):
             self.__var_output = base ** 2 / reps
-            self.__cov_output = covs
+            if compute_cov:
+                self.__cov_output = covs
         else:
             self.__var_output += base ** 2 / reps
-            self.__cov_output += covs
+            if compute_cov:
+                self.__cov_output += covs
     for name, module in model.named_modules():
         hooks[name] = module.register_forward_hook(hook_fn)
     return hooks
