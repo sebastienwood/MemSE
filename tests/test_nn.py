@@ -19,11 +19,11 @@ def test_zero_diag():
 
 
 def test_relu_derivative():
-    mu = torch.arange(-10, -1)
+    mu = torch.arange(-10, -0.01, step=0.1)
     grad = ReLU.derivatives(None, None, mu)[1]
     assert torch.all(grad == 0)
 
-    mu = torch.arange(1, 10)
+    mu = torch.arange(0.01, 10, step=0.1)
     grad = ReLU.derivatives(None, None, mu)[1]
     assert torch.all(grad == 1)
 
