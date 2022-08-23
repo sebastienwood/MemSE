@@ -29,7 +29,7 @@ def test_memristor_manips(method, device, net, sigma):
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)  # TODO method/net wise rtol/atol
 
     if DEBUG:
-        mses, means, varis, covs = memse.mse_forward(inp, compute_power=False, reps=1e2)
+        mses, means, varis, covs = memse.mse_forward(inp, compute_power=False, reps=1e5)
         print(means)
         print(varis)
         print(covs)

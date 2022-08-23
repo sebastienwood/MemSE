@@ -49,8 +49,8 @@ def op_slow(input, gamma, mu, c, weight_shape, padding):
                                         oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0] - 1 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1] - 1
                                         oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0] - 1 or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1] - 1
                                         if not oob_0 and not oob_0p:
-                                            v = mu[bi, ci, i0ii, j0ji] 
-                                            v *= mu[bi, ci, i0pii, j0pji] 
+                                            v = mu[bi, ci, i0ii, j0ji]
+                                            v *= mu[bi, ci, i0pii, j0pji]
                                             v += gamma[bi, ci, i0ii, j0ji, ci, i0pii, j0pji]
                                             input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
                                         

@@ -1,3 +1,4 @@
+from typing import Callable
 import torch.nn as nn
 import math
 
@@ -59,7 +60,7 @@ class VGG(nn.Module):
 
 
 
-def make_layers(cfg, batch_norm=False):
+def make_layers(cfg, batch_norm=False, activation: Callable = nn.Softplus):
     layers = []
     in_channels = 3
     for v in cfg:
@@ -68,26 +69,15 @@ def make_layers(cfg, batch_norm=False):
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1, bias=False)
             if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.Softplus()]
+                layers += [conv2d, nn.BatchNorm2d(v), activation()]
             else:
-                layers += [conv2d, nn.Softplus()]
+                layers += [conv2d, activation()]
             in_channels = v
     return nn.Sequential(*layers)
 
+
 def make_layers_ReLU(cfg, batch_norm=False):
-    layers = []
-    in_channels = 3
-    for v in cfg:
-        if v == 'A':
-            layers += [nn.AvgPool2d(kernel_size=2, stride=2)]
-        else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1, bias=False)
-            if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU()]
-            else:
-                layers += [conv2d, nn.ReLU()]
-            in_channels = v
-    return nn.Sequential(*layers)
+    return make_layers(cfg, batch_norm, nn.ReLU)
 
 
 cfg = {
@@ -143,5 +133,9 @@ def smallest_vgg_ReLU(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False), **kwargs)
+    features_only = kwargs.pop('features_only', False)
+    if features_only:
+        model = make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False)
+    else:
+        model = VGG(make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False), **kwargs)
     return model

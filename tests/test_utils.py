@@ -27,6 +27,7 @@ MODELS = {
     'seq': nn.Sequential(*[nn.Sequential(conv_factory(), nn.ReLU()) for _ in range(3)]),
     'vgg': smallest_vgg(),
     'vgg_relu': smallest_vgg_ReLU(),
+    'vgg_features': smallest_vgg_ReLU(features_only=True),
     'resnet': fuse_conv_bn(resnet18().eval(), 'resnet18'),
 }
 
