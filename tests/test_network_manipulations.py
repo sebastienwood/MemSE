@@ -9,7 +9,7 @@ DEBUG = True
 torch.manual_seed(0)
 #inp = torch.rand(BATCH_SIZE,3,32,32)
 
-from test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_net_transformed, nn2memse
+from MemSE.test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_net_transformed, nn2memse
 
 
 @pytest.mark.parametrize("method", METHODS.values())
@@ -25,11 +25,16 @@ def test_memristor_manips(method, device, net, sigma):
     assert not torch.any(torch.isnan(m))
     assert not torch.any(torch.isnan(g))
     mse_th = mse_gamma(o, m, g)
-    mse_sim = memse.mse_sim(inp, o, reps=1e5)
+    mse_sim = memse.mse_sim(inp, o, reps=1e3)
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)  # TODO method/net wise rtol/atol
 
     if DEBUG:
-        mses, means, varis, covs = memse.mse_forward(inp, compute_power=False, reps=1e5)
+        print('DEBUG STARTS')
+        mses, means, varis, covs = memse.mse_forward(inp, compute_power=False, reps=1e3)
+        for t in [means, varis, covs]:
+            for type in t['sim'].keys():
+                for idx in type.keys():
+                    assert torch.allclose(t['sim'][type][idx], t['us'][type][idx], rtol=0.05)
         print(means)
         print(varis)
         print(covs)

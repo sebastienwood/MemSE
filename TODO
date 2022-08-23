@@ -1,2 +1,3 @@
 [] stride in Conv2DUF @sebastienwood
 [] MSE_forward for conv_to_fc layer @sebastienwood
+[] plot_gamma in MSE_forward @sebastienwood
