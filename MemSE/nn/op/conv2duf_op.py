@@ -57,7 +57,7 @@ def op_slow(input, gamma, mu, c, weight_shape, padding):
     return input
 
 
-#@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
+@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
 def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
     for bi in prange(input.shape[0]):
         for i0 in prange(input.shape[2]):
@@ -67,6 +67,7 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
                         v = 0.
                         for ci in range(weight_shape_1):
                             for ii in range(weight_shape_2):
+                                # Virtual padding
                                 i0ii = i0+ii
                                 i0pii = i0p+ii
                                 oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
@@ -79,6 +80,7 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
                                     oob_0 = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
                                     oob_0p = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
                                     if not oob_0 and not oob_0p:
+                                        # Recenter on actual coords
                                         i0ii_padded = i0ii - padding[0]
                                         j0ji_padded = j0ji - padding[1]
                                         i0pii_padded = i0pii - padding[0]
