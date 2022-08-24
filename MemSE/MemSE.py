@@ -185,8 +185,8 @@ class MemSE(nn.Module):
                     covs['sim'].get(type(s)).update({idx: sim_.mean().detach().cpu().numpy()})
                     covs['us'].get(type(s)).update({idx: us_.mean().detach().cpu().numpy()})
                     if output_handle is not None:
-                        self.plot_gamma(sim_, output_handle, type(s), idx)
-                        self.plot_gamma(us_, output_handle, type(s), idx)
+                        self.plot_gamma(sim_, output_handle, f'{type(s)} SIM', idx)
+                        self.plot_gamma(us_, output_handle, f'{type(s)} US', idx)
         return mses, means, varis, covs
 
 
