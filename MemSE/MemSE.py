@@ -113,7 +113,7 @@ class MemSE(nn.Module):
 	def no_power_forward(self, x):
 		return self.forward(x, False)
 
-	def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False):
+	def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False, output_handle = None):
 		reps = int(reps)
 		if self.input_bias:
 			x += self.bias[None, :, :, :]
@@ -180,8 +180,13 @@ class MemSE(nn.Module):
 				varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
 				varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
 				if compute_cov:
-					covs['sim'].get(type(s)).update({idx: zero_diag(cov_output).mean().detach().cpu().numpy()})
-					covs['us'].get(type(s)).update({idx: zero_diag(data['gamma']).mean().detach().cpu().numpy()})
+					s = zero_diag(cov_output).mean().detach().cpu().numpy()
+					u = zero_diag(data['gamma']).mean().detach().cpu().numpy()
+					covs['sim'].get(type(s)).update({idx: s})
+					covs['us'].get(type(s)).update({idx: u})
+					if output_handle is not None:
+						self.plot_gamma(s, output_handle, type(s), idx)
+						self.plot_gamma(u, output_handle, type(s), idx)
 		return mses, means, varis, covs
 
 
@@ -200,7 +205,7 @@ class MemSE(nn.Module):
 		self.quanter.renoise()
 		return self.model(x)
 
-	def plot_gamma(self, gamma, output_handle, current_type, idx):
+	def plot_gamma(self, gamma, output_handle, current_type, idx, per_sample=False):
 		if output_handle == 'density':
 			plt.figure(figsize=(12,4))
 			reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
@@ -217,9 +222,9 @@ class MemSE(nn.Module):
 				hdle = axs[img_idx].imshow(reshaped)
 			fig.colorbar(hdle, ax=axs.ravel().tolist())
 			plt.show()
-		maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
-		mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
-		self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
+		#maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
+		#mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
+		#self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
 		#self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
 	
 	def post_process_gamma(self, gamma):
