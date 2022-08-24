@@ -57,7 +57,7 @@ def op_slow(input, gamma, mu, c, weight_shape, padding):
     return input
 
 
-@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
+#@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
 def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
     for bi in prange(input.shape[0]):
         for i0 in prange(input.shape[2]):
