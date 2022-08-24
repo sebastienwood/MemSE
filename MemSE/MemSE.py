@@ -180,10 +180,10 @@ class MemSE(nn.Module):
                 varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
                 varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
                 if compute_cov:
-                    sim_ = zero_diag(cov_output)
-                    us_ = zero_diag(data['gamma'])
-                    covs['sim'].get(type(s)).update({idx: sim_.mean().detach().cpu().numpy()})
-                    covs['us'].get(type(s)).update({idx: us_.mean().detach().cpu().numpy()})
+                    sim_ = cov_output
+                    us_ = data['gamma']
+                    covs['sim'].get(type(s)).update({idx: zero_diag(sim_).mean().detach().cpu().numpy()})
+                    covs['us'].get(type(s)).update({idx: zero_diag(us_).mean().detach().cpu().numpy()})
                     if output_handle is not None:
                         self.plot_gamma(sim_, output_handle, f'{type(s)} SIM', idx)
                         self.plot_gamma(us_, output_handle, f'{type(s)} US', idx)
