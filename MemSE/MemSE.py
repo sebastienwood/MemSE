@@ -182,7 +182,8 @@ class MemSE(nn.Module):
                 if compute_cov:
                     s = zero_diag(cov_output)
                     u = zero_diag(data['gamma'])
-                    print(covs)
+                    print(covs['sim'])
+                    print(covs['sim'].get(type(s)))
                     covs['sim'].get(type(s)).update({idx: s.mean().detach().cpu().numpy()})
                     covs['us'].get(type(s)).update({idx: u.mean().detach().cpu().numpy()})
                     if output_handle is not None:
