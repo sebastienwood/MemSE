@@ -187,6 +187,7 @@ class MemSE(nn.Module):
                     if output_handle is not None:
                         self.plot_gamma(sim_, output_handle, f'{type(s)} SIM', idx)
                         self.plot_gamma(us_, output_handle, f'{type(s)} US', idx)
+                        self.plot_gamma(us_ - sim_, output_handle, f'{type(s)} US - SIM', idx)
         return mses, means, varis, covs
 
 

@@ -33,7 +33,7 @@ def test_memristor_manips(method, device, net, sigma):
         mses, means, varis, covs = memse.mse_forward(inp, compute_power=False, reps=1e3)
         for t in [means, varis, covs]:
             for type in t['sim'].keys():
-                for idx in type.keys():
+                for idx in t['sim'][type].keys():
                     assert torch.allclose(t['sim'][type][idx], t['us'][type][idx], rtol=0.05)
         print(means)
         print(varis)
