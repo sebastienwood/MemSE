@@ -170,20 +170,20 @@ class MemSE(nn.Module):
                         varis[t].update({type(s): {}})
                         covs[t].update({type(s): {}})
                 mses['sim'].get(type(s)).update({idx: mse_output.mean().detach().cpu().numpy()})
-                means['sim'].get(type(s)).update({idx: th_output.mean().detach().cpu().numpy()})
-                means['us'].get(type(s)).update({idx: data['mu'].mean().detach().cpu().numpy()})
+                means['sim'].get(type(s)).update({idx: th_output.detach().cpu().numpy()})
+                means['us'].get(type(s)).update({idx: data['mu'].detach().cpu().numpy()})
                 if len(original_output.shape) > 2:
                     original_output = original_output.reshape(original_output.shape[0], -1)
                 gamma_viewed = original_output.shape + original_output.shape[1:]
                 se_us = mse_gamma(original_output, data['mu'].reshape_as(original_output), data['gamma'].reshape(gamma_viewed) if data['gamma_shape'] is None else torch.zeros(gamma_viewed, device=x))
                 mses['us'].get(type(s)).update({idx: se_us.mean().detach().cpu().numpy()})
-                varis['sim'].get(type(s)).update({idx: va_output.mean().detach().cpu().numpy()})
-                varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).mean().detach().cpu().numpy()})
+                varis['sim'].get(type(s)).update({idx: va_output.detach().cpu().numpy()})
+                varis['us'].get(type(s)).update({idx: data['gamma'].view(gamma_viewed).diagonal(dim1=1, dim2=2).detach().cpu().numpy()})
                 if compute_cov:
                     sim_ = cov_output
                     us_ = data['gamma']
-                    covs['sim'].get(type(s)).update({idx: zero_diag(sim_).mean().detach().cpu().numpy()})
-                    covs['us'].get(type(s)).update({idx: zero_diag(us_).mean().detach().cpu().numpy()})
+                    covs['sim'].get(type(s)).update({idx: zero_diag(sim_).detach().cpu().numpy()})
+                    covs['us'].get(type(s)).update({idx: zero_diag(us_).detach().cpu().numpy()})
                     if output_handle is not None:
                         self.plot_gamma(sim_, output_handle, f'{type(s)} SIM', idx)
                         self.plot_gamma(us_, output_handle, f'{type(s)} US', idx)
