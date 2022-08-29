@@ -3,12 +3,13 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+from numba import njit, prange
 
 from .op import conv2duf_op
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
 class Conv2DUF(nn.Module):
-	def __init__(self, conv, input_shape, output_shape, slow: bool = False):
+	def __init__(self, conv, input_shape, output_shape, slow: bool = True):
 		super().__init__()
 		assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
 		self.c = conv
@@ -156,8 +157,9 @@ class Conv2DUF(nn.Module):
 		return torch.from_numpy(mu_res), torch.from_numpy(gamma_res), None
 
 	@staticmethod
+	@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
 	def inner_loop(gamma_res, ratio, w, mu, gamma):
-		for bi in range(gamma_res.shape[0]):
+		for bi in prange(gamma_res.shape[0]):
 			for c0 in range(gamma_res.shape[1]):
 				for i0 in range(gamma_res.shape[2]):
 					for j0 in range(gamma_res.shape[3]):

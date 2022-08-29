@@ -11,6 +11,8 @@ torch.manual_seed(0)
 
 from MemSE.test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_net_transformed, nn2memse
 
+if DEBUG:
+    inp = torch.rand(2, 3, 5, 5)
 
 @pytest.mark.parametrize("method", METHODS.values())
 @pytest.mark.parametrize("device", DEVICES)
@@ -18,7 +20,7 @@ from MemSE.test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_ne
 @pytest.mark.parametrize("sigma", SIGMA)
 def test_memristor_manips(method, device, net, sigma):
     net = MODELS[net]
-    conv2duf, o = get_net_transformed(net, method)
+    conv2duf, o = get_net_transformed(net, method, inp)
     conv2duf, o = conv2duf.to(device), o.to(device)
     memse = nn2memse(conv2duf, sigma)
     m, g, _ = memse.no_power_forward(inp.to(device))
