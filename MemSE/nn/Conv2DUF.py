@@ -9,7 +9,7 @@ from .op import conv2duf_op
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
 
 class Conv2DUF(nn.Module):
-	def __init__(self, conv, input_shape, output_shape, slow: bool = True):
+	def __init__(self, conv, input_shape, output_shape, slow: bool = False):
 		super().__init__()
 		assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
 		self.c = conv
@@ -130,7 +130,7 @@ class Conv2DUF(nn.Module):
 		first_comp = nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
-		gamma_add_diag(gamma_n, first_comp)
+		#gamma_add_diag(gamma_n, first_comp)
 
 		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
 		gamma = gamma * memse_dict['r'] ** 2
