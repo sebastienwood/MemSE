@@ -163,7 +163,7 @@ class Conv2DUF(nn.Module):
 			for c0 in prange(gamma_res.shape[1]):
 				for i0 in prange(gamma_res.shape[2]):
 					for j0 in prange(gamma_res.shape[3]):
-						for c0p in range(gamma_res.shape[4]):
+						for c0p in prange(gamma_res.shape[4]):
 							for i0p in range(gamma_res.shape[5]):
 								for j0p in range(gamma_res.shape[6]):
 									# DOUBLE CONV
@@ -179,7 +179,7 @@ class Conv2DUF(nn.Module):
 									
 						# DIAGONALE == VAR
 						gamma_res[bi, c0, i0, j0, c0, i0, j0] = 0
-						for ci in range(w.shape[1]):
+						for ci in prange(w.shape[1]):
 							for ii in range(w.shape[2]):
 								for ji in range(w.shape[3]):
 									g_2 = gamma[bi, ci, i0+ii, j0+ji, ci, i0+ii, j0+ji]
