@@ -154,7 +154,7 @@ class Conv2DUF(nn.Module):
 		conv2duf.inner_loop(gamma_res, ratio, w, mu, gamma)
 									
 		gamma_res *= r_2
-		return torch.from_numpy(mu_res), torch.from_numpy(gamma_res), None
+		return torch.from_numpy(mu_res).to(memse_dict['mu']), torch.from_numpy(gamma_res).to(memse_dict['mu']), None
 
 	@staticmethod
 	@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
