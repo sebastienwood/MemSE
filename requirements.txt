@@ -12,8 +12,6 @@ prettytable
 pykeops
 
 numba
-icc-rt
-taichi
 
 -e .
 
