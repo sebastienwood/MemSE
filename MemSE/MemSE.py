@@ -216,13 +216,17 @@ class MemSE(nn.Module):
             plt.legend()
             plt.show()
         elif output_handle == 'imshow':
-            fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True, facecolor='white')
-            fig.suptitle(f'{idx}th layer ({current_type})')
-            for img_idx in range(gamma.shape[0]):
-                reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
-                hdle = axs[img_idx].imshow(reshaped)
-            #fig.colorbar(hdle, ax=axs.ravel().tolist())
-            plt.show()
+            if gamma.shape[0] > 1:
+                fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True, facecolor='white')
+                fig.suptitle(f'{idx}th layer ({current_type})')
+                for img_idx in range(gamma.shape[0]):
+                    reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
+                    hdle = axs[img_idx].matshow(reshaped)
+                #fig.colorbar(hdle, ax=axs.ravel().tolist())
+                plt.show()
+            else:
+                plt.matshow(gamma[0].detach().cpu().reshape(int(math.sqrt(gamma[0].numel())), -1))
+                plt.show()
         #maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
         #mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
         #self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
