@@ -160,9 +160,9 @@ class Conv2DUF(nn.Module):
 	@njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
 	def inner_loop(gamma_res, ratio, w, mu, gamma):
 		for bi in prange(gamma_res.shape[0]):
-			for c0 in range(gamma_res.shape[1]):
-				for i0 in range(gamma_res.shape[2]):
-					for j0 in range(gamma_res.shape[3]):
+			for c0 in prange(gamma_res.shape[1]):
+				for i0 in prange(gamma_res.shape[2]):
+					for j0 in prange(gamma_res.shape[3]):
 						for c0p in range(gamma_res.shape[4]):
 							for i0p in range(gamma_res.shape[5]):
 								for j0p in range(gamma_res.shape[6]):
