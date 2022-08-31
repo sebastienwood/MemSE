@@ -24,39 +24,6 @@ TUBE = None
 module_path = os.path.dirname(__file__)
 
 
-def op_slow(input, gamma, mu, c, weight_shape, padding):
-    if c.dim() == 0:
-        c = c.repeat(input.shape[1])
-    print(input.shape)
-    print(gamma.shape)
-    print(mu.shape)
-    print(c.shape)
-    print(weight_shape)
-    for bi in range(input.shape[0]):
-        for c0 in range(input.shape[1]):
-            for i0 in range(input.shape[2]):
-                for j0 in range(input.shape[3]):
-                    for i0p in range(input.shape[5]):
-                        for j0p in range(input.shape[6]):
-                            for ci in range(weight_shape[1]):
-                                for ii in range(weight_shape[2]):
-                                    for ji in range(weight_shape[3]):
-                                        v = 0
-                                        i0ii = i0+ii
-                                        j0ji = j0+ji
-                                        i0pii = i0p+ii
-                                        j0pji = j0p+ji
-                                        oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0] - 1 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1] - 1
-                                        oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0] - 1 or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1] - 1
-                                        if not oob_0 and not oob_0p:
-                                            v = mu[bi, ci, i0ii, j0ji]
-                                            v *= mu[bi, ci, i0pii, j0pji]
-                                            v += gamma[bi, ci, i0ii, j0ji, ci, i0pii, j0pji]
-                                            input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
-                                        
-    return input
-
-
 @njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
 def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
     for bi in prange(input.shape[0]):
@@ -210,8 +177,8 @@ class Conv2DUF_op_CUDA(Function):
     @staticmethod
     def forward(ctx, input, gamma, mu, c, weight_shape, padding):
         cuda.select_device(int(str(input.device).split(':')[1]))
-        # TODO fidling with threads
-        if input.shape[2] * input.shape[1] < input.shape[0]:
+        # TODO batch heavy/small filters is longer in any case
+        if False and input.shape[2] * input.shape[3] < input.shape[0]:
             threadsperblock= (min(1024,next_power_of_2(input.shape[0])),)# 4)
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
 
@@ -234,8 +201,7 @@ class Conv2DUF_op_CUDA(Function):
 
 def next_power_of_2(x):
     return 1<<(x-1).bit_length()
-
-DEBUG = False
+    
 
 def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1, **kwargs):
     if isinstance(stride, int):
@@ -253,9 +219,7 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), pad
     assert input.shape[1] == c.shape[0]
     assert weight_shape[1] == mu.shape[1]
     assert weight_shape[0] == input.shape[1]
-    if DEBUG:
-        op_slow(input, gamma, mu, c, weight_shape, padding=padding)
-        return input
+
     if input.device.type == "cpu":
         Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, padding)
         return input
