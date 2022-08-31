@@ -25,33 +25,37 @@ module_path = os.path.dirname(__file__)
 
 
 @njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
-def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
+def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
     for bi in prange(input.shape[0]):
         for i0 in prange(input.shape[2]):
             for j0 in prange(input.shape[3]):
                 for i0p in range(input.shape[5]):
                     for j0p in range(input.shape[6]):
+                        strided_i0 = i0 * stride[0]
+                        strided_i0p = i0p * stride[0]
+                        strided_j0 = j0 * stride[1]
+                        strided_j0p = j0p * stride[1]
                         v = 0.
-                        for ci in range(weight_shape_1):
-                            for ii in range(weight_shape_2):
-                                # Virtual padding
-                                i0ii = i0+ii
-                                i0pii = i0p+ii
-                                oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
-                                oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
-                                if oob_0 or oob_0p:
-                                    continue
-                                for ji in range(weight_shape_3):
-                                    j0ji = j0+ji
-                                    j0pji = j0p+ji
-                                    oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
-                                    oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
-                                    if not oob_0j and not oob_0pj:
-                                        # Recenter on actual coords
-                                        i0ii_padded = i0ii - padding[0]
-                                        j0ji_padded = j0ji - padding[1]
-                                        i0pii_padded = i0pii - padding[0]
-                                        j0pji_padded = j0pji - padding[1]
+                        for ii in range(weight_shape_2):
+                            # Virtual padding
+                            i0ii = strided_i0 + ii
+                            i0pii = strided_i0p + ii
+                            oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
+                            oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
+                            if oob_0 or oob_0p:
+                                continue
+                            for ji in range(weight_shape_3):
+                                j0ji = strided_j0 + ji
+                                j0pji = strided_j0p + ji
+                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
+                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
+                                if not oob_0j and not oob_0pj:
+                                    # Recenter on actual coords
+                                    i0ii_padded = i0ii - padding[0]
+                                    j0ji_padded = j0ji - padding[1]
+                                    i0pii_padded = i0pii - padding[0]
+                                    j0pji_padded = j0pji - padding[1]
+                                    for ci in range(weight_shape_1):
                                         v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         for c0 in range(input.shape[1]):
                             input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
@@ -59,7 +63,7 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
 
 
 @cuda.jit
-def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
+def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
     sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
     bi = cuda.grid(1)
     x_gridsize = cuda.gridsize(1)
@@ -82,27 +86,31 @@ def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape
             for j0 in range(input.shape[3]):
                 for i0p in range(input.shape[5]):
                     for j0p in range(input.shape[6]):
+                        strided_i0 = i0 * stride[0]
+                        strided_i0p = i0p * stride[0]
+                        strided_j0 = j0 * stride[1]
+                        strided_j0p = j0p * stride[1]
                         v = numba.float32(0.)
-                        for ci in range(weight_shape_1):
-                            for ii in range(weight_shape_2):
-                                # Virtual padding
-                                i0ii = i0+ii
-                                i0pii = i0p+ii
-                                oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
-                                oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
-                                if oob_0 or oob_0p:
-                                    continue
-                                for ji in range(weight_shape_3):
-                                    j0ji = j0+ji
-                                    j0pji = j0p+ji
-                                    oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
-                                    oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
-                                    if not oob_0j and not oob_0pj:
-                                        # Recenter on actual coords
-                                        i0ii_padded = i0ii - padding[0]
-                                        j0ji_padded = j0ji - padding[1]
-                                        i0pii_padded = i0pii - padding[0]
-                                        j0pji_padded = j0pji - padding[1]
+                        for ii in range(weight_shape_2):
+                            # Virtual padding
+                            i0ii = strided_i0 + ii
+                            i0pii = strided_i0p + ii
+                            oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
+                            oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
+                            if oob_0 or oob_0p:
+                                continue
+                            for ji in range(weight_shape_3):
+                                j0ji = strided_j0 + ji
+                                j0pji = strided_j0p + ji
+                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
+                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
+                                if not oob_0j and not oob_0pj:
+                                    # Recenter on actual coords
+                                    i0ii_padded = i0ii - padding[0]
+                                    j0ji_padded = j0ji - padding[1]
+                                    i0pii_padded = i0pii - padding[0]
+                                    j0pji_padded = j0pji - padding[1]
+                                    for ci in range(weight_shape_1):
                                         v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         for c0 in range(input.shape[1]):
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
@@ -110,7 +118,7 @@ def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape
 
 
 @cuda.jit
-def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding):
+def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
     sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
     bi, i0, j0 = cuda.grid(3)
     x_gridsize, y_gridsize, z_gridsize = cuda.gridsize(3)
@@ -133,27 +141,31 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
                 # Iterate on io j0 i0p j0p
                 for i0p in range(input.shape[5]):
                     for j0p in range(input.shape[6]):
+                        strided_i0 = i0 * stride[0]
+                        strided_i0p = i0p * stride[0]
+                        strided_j0 = j0 * stride[1]
+                        strided_j0p = j0p * stride[1]
                         v = numba.float32(0.)
-                        for ci in range(weight_shape_1):
-                            for ii in range(weight_shape_2):
-                                # Virtual padding
-                                i0ii = i0+ii
-                                i0pii = i0p+ii
-                                oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
-                                oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
-                                if oob_0 or oob_0p:
-                                    continue
-                                for ji in range(weight_shape_3):
-                                    j0ji = j0+ji
-                                    j0pji = j0p+ji
-                                    oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
-                                    oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
-                                    if not oob_0j and not oob_0pj:
-                                        # Recenter on actual coords
-                                        i0ii_padded = i0ii - padding[0]
-                                        j0ji_padded = j0ji - padding[1]
-                                        i0pii_padded = i0pii - padding[0]
-                                        j0pji_padded = j0pji - padding[1]
+                        for ii in range(weight_shape_2):
+                            # Virtual padding
+                            i0ii = strided_i0 + ii
+                            i0pii = strided_i0p + ii
+                            oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
+                            oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
+                            if oob_0 or oob_0p:
+                                continue
+                            for ji in range(weight_shape_3):
+                                j0ji = strided_j0 + ji
+                                j0pji = strided_j0p + ji
+                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
+                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
+                                if not oob_0j and not oob_0pj:
+                                    # Recenter on actual coords
+                                    i0ii_padded = i0ii - padding[0]
+                                    j0ji_padded = j0ji - padding[1]
+                                    i0pii_padded = i0pii - padding[0]
+                                    j0pji_padded = j0pji - padding[1]
+                                    for ci in range(weight_shape_1):
                                         v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
@@ -165,8 +177,8 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
 
 class Conv2DUF_op(Function):
     @staticmethod
-    def forward(ctx, input, gamma, mu, c, weight_shape, padding):
-        return torch.from_numpy(op_numba(input.numpy(), gamma.numpy(), mu.numpy(), c.numpy(), weight_shape[1], weight_shape[2], weight_shape[3], padding=padding))
+    def forward(ctx, input, gamma, mu, c, weight_shape, padding, stride):
+        return torch.from_numpy(op_numba(input.numpy(), gamma.numpy(), mu.numpy(), c.numpy(), weight_shape[1], weight_shape[2], weight_shape[3], padding=padding, stride=stride))
 
     @staticmethod
     def backward(ctx, grad_out):
@@ -175,7 +187,7 @@ class Conv2DUF_op(Function):
 
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
-    def forward(ctx, input, gamma, mu, c, weight_shape, padding):
+    def forward(ctx, input, gamma, mu, c, weight_shape, padding, stride):
         cuda.select_device(int(str(input.device).split(':')[1]))
         # TODO batch heavy/small filters is longer in any case
         if False and input.shape[2] * input.shape[3] < input.shape[0]:
@@ -183,7 +195,7 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
 
             blockspergrid = (blockspergrid_x,)# blockspergrid_y)
-            op_numba_c[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3], padding)
+            op_numba_c[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         else:
             threadsperblock= (8,8,8)# 4)
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
@@ -191,7 +203,7 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding)
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
 
     @staticmethod
@@ -201,12 +213,11 @@ class Conv2DUF_op_CUDA(Function):
 
 def next_power_of_2(x):
     return 1<<(x-1).bit_length()
-    
+
 
 def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1, **kwargs):
     if isinstance(stride, int):
         stride = (stride, stride)
-    assert all(s == 1 for s in stride), 'Stride != 1 not supported yet'
     if isinstance(dilation, int):
         dilation = (dilation, dilation)
     assert all(d == 1 for d in dilation), 'Dilation != 1 not supported yet'
@@ -221,10 +232,10 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), pad
     assert weight_shape[0] == input.shape[1]
 
     if input.device.type == "cpu":
-        Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, padding)
+        Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, padding, stride)
         return input
     else:
-        input = Conv2DUF_op_CUDA.apply(input, gamma, mu, c.to(input), weight_shape, padding)
+        input = Conv2DUF_op_CUDA.apply(input, gamma, mu, c.to(input), weight_shape, padding, stride)
         return input
 
 
