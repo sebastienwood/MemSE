@@ -123,15 +123,9 @@ class Conv2DUF(nn.Module):
 		mu = conv2duf(memse_dict['mu']) * memse_dict['r']
 		gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'], device=mu.device, dtype=mu.dtype)
 
-		gamma_diag = gamma_to_diag(gamma)
 		c0 = sigma ** 2 / c ** 2
-		#first_comp = (gamma_diag + memse_dict['mu'] ** 2) * c0
-		#first_comp = nn.functional.conv2d(input=first_comp, weight=torch.ones_like(weights), bias=None, **conv2duf.conv_property_dict)
-		first_comp = nn.functional.conv2d(input=gamma_diag, weight=weights ** 2, bias=None, **conv2duf.conv_property_dict)
 
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
-		#gamma_add_diag(gamma_n, first_comp)
-
 		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
 		gamma = gamma * memse_dict['r'] ** 2
 		return mu, gamma, None

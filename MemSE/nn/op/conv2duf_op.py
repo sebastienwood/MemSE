@@ -117,21 +117,27 @@ def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape
                     for j0p in range(input.shape[6]):
                         v = numba.float32(0.)
                         for ci in range(weight_shape_1):
-                            # threadM = mu[bi, ci]
-                            # threadG = gamma[bi, ci]
                             for ii in range(weight_shape_2):
+                                # Virtual padding
                                 i0ii = i0+ii
                                 i0pii = i0p+ii
+                                oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
+                                oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
+                                if oob_0 or oob_0p:
+                                    continue
                                 for ji in range(weight_shape_3):
                                     j0ji = j0+ji
                                     j0pji = j0p+ji
-                                    oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0] - 1 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1] - 1
-                                    oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0] - 1 or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1] - 1
-                                    if not oob_0 and not oob_0p:
-                                        v += (mu[bi, ci, i0ii, j0ji] * mu[bi, ci, i0pii, j0pji] + gamma[bi, ci, i0ii, j0ji, ci, i0pii, j0pji])
-                        # For each c0 update input
+                                    oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
+                                    oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
+                                    if not oob_0j and not oob_0pj:
+                                        # Recenter on actual coords
+                                        i0ii_padded = i0ii - padding[0]
+                                        j0ji_padded = j0ji - padding[1]
+                                        i0pii_padded = i0pii - padding[0]
+                                        j0pji_padded = j0pji - padding[1]
+                                        v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         for c0 in range(input.shape[1]):
-                            #input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
         bi += x_gridsize
 
@@ -163,18 +169,27 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
                         v = numba.float32(0.)
                         for ci in range(weight_shape_1):
                             for ii in range(weight_shape_2):
+                                # Virtual padding
                                 i0ii = i0+ii
                                 i0pii = i0p+ii
+                                oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
+                                oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
+                                if oob_0 or oob_0p:
+                                    continue
                                 for ji in range(weight_shape_3):
                                     j0ji = j0+ji
                                     j0pji = j0p+ji
-                                    oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0] - 1 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1] - 1
-                                    oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0] - 1 or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1] - 1
-                                    if not oob_0 and not oob_0p:
-                                        v += (mu[bi, ci, i0ii, j0ji] * mu[bi, ci, i0pii, j0pji] + gamma[bi, ci, i0ii, j0ji, ci, i0pii, j0pji])
+                                    oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
+                                    oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
+                                    if not oob_0j and not oob_0pj:
+                                        # Recenter on actual coords
+                                        i0ii_padded = i0ii - padding[0]
+                                        j0ji_padded = j0ji - padding[1]
+                                        i0pii_padded = i0pii - padding[0]
+                                        j0pji_padded = j0pji - padding[1]
+                                        v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
-                            #input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
                 j0 += z_gridsize
             i0 += y_gridsize
