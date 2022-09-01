@@ -103,10 +103,10 @@ def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Te
 	return mu_r + oe.contract('i,bi->b',torch.square(c), diags)/r
 
 
-def double_conv(tensor, weight, stride, padding, dilation, groups):
+@torch.jit.script
+def double_conv(tensor: torch.Tensor, weight: torch.Tensor, stride: List[int], padding: List[int], dilation: List[int], groups: int):
 	'''A doubly convolution for tensor of shape [bijkijk]'''
 	# TODO not so sure it works for grouped convolutions
-	assert type(groups) == int or groups == 'adaptive'
 	bs = tensor.shape[0]
 	nc = tensor.shape[1]
 	img_shape = tensor.shape[1:4]
