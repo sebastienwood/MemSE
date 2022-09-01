@@ -31,12 +31,6 @@ class Conv2DUF(nn.Module):
 		# return out
 		return torch.nn.functional.conv2d(x, self.weight.t().reshape(self.original_weight.shape), bias=self.bias, **self.conv_property_dict)
 
-	def _mse_var(self, conv2duf, memse_dict, ct, w, sigma):
-		if self.__slow == True:
-			return self.slow_mse_var(conv2duf, memse_dict, ct, w, sigma)
-		else:
-			return self.mse_var(conv2duf, memse_dict, ct, w, sigma)
-
 	@property
 	def kernel_size(self):
 		return self.c.kernel_size
@@ -81,14 +75,14 @@ class Conv2DUF(nn.Module):
 		if memse_dict['compute_power']:
 			Gpos = torch.clip(conv2duf.original_weight, min=0)
 			Gneg = torch.clip(-conv2duf.original_weight, min=0)
-			new_mu_pos, new_gamma_pos, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gpos, memse_dict['sigma'])
-			new_mu_neg, new_gamma_neg, _ = conv2duf._mse_var(conv2duf, memse_dict, ct, Gneg, memse_dict['sigma'])
+			new_mu_pos, new_gamma_pos, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, Gpos, memse_dict['sigma'])
+			new_mu_neg, new_gamma_neg, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, Gneg, memse_dict['sigma'])
 
 			P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
 		else:
 			P_tot = 0.
 
-		mu, gamma, gamma_shape = conv2duf._mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, memse_dict['sigma'] * math.sqrt(2))
+		mu, gamma, gamma_shape = conv2duf.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, memse_dict['sigma'] * math.sqrt(2))
 
 		memse_dict['P_tot'] += P_tot
 		memse_dict['current_type'] = 'Conv2DUF'
