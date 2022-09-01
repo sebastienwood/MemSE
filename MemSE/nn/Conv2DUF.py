@@ -21,14 +21,14 @@ class Conv2DUF(nn.Module):
         else:
             self.bias = None
 
-    def forward(self, x):
+    def forward(self, x, weight=None):
         # inp_unf = self.unfold_input(x)
         # out_unf = inp_unf.transpose(1, 2).matmul(self.weight.to(x)).transpose(1, 2)
         # out = out_unf.view(x.shape[0], *self.output_shape)
         # if self.bias is not None:
         # 	out += self.bias[:, None, None]
         # return out
-        return torch.nn.functional.conv2d(x, self.original_weight, bias=self.bias, **self.conv_property_dict)
+        return torch.nn.functional.conv2d(x, self.original_weight if weight is None else weight, bias=self.bias, **self.conv_property_dict)
 
     @property
     def original_weight(self):
@@ -95,7 +95,7 @@ class Conv2DUF(nn.Module):
 
     @staticmethod
     def mse_var(conv2duf: Conv2DUF, memse_dict, c, weights, sigma):
-        mu = conv2duf(memse_dict['mu']) * memse_dict['r']
+        mu = conv2duf(memse_dict['mu'], weights) * memse_dict['r']
         gamma = memse_dict['gamma'] if memse_dict['gamma_shape'] is None else torch.zeros(memse_dict['gamma_shape'], device=mu.device, dtype=mu.dtype)
 
         c0 = sigma ** 2 / c ** 2
