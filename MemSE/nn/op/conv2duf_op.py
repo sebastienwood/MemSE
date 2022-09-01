@@ -166,9 +166,11 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
                                     i0pii_padded = i0pii - padding[0]
                                     j0pji_padded = j0pji - padding[1]
                                     mu_cache = mu[bi]
-                                    gamma_cache = gamma[bi]
+                                    # TODO idea: ci last format for coalesced accesses
+                                    # TODO shared memory for block at least on bi
                                     for ci in range(weight_shape_1):
-                                        v += (mu_cache[ci, i0ii_padded, j0ji_padded] * mu_cache[ci, i0pii_padded, j0pji_padded] + gamma_cache[ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
+                                        #v += (mu_cache[ci, i0ii_padded, j0ji_padded] * mu_cache[ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
+                                        v += (mu_cache[ci, i0ii_padded, j0ji_padded] * mu_cache[ci, i0pii_padded, j0pji_padded] + gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, ci])
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
@@ -189,7 +191,7 @@ class Conv2DUF_op(Function):
 
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
-    def forward(ctx, input, gamma, mu, c, weight_shape, padding, stride):
+    def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, mu: torch.Tensor, c, weight_shape, padding, stride):
         cuda.select_device(int(str(input.device).split(':')[1]))
         # TODO batch heavy/small filters is longer in any case
         if False and input.shape[2] * input.shape[3] < input.shape[0]:
@@ -205,7 +207,12 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
+
+            with torch.no_grad():
+                gamma_permute = torch.permute(gamma.detach(), (0, 2, 3, 5, 6, 1, 4))
+                gamma_permute = torch.diagonal(gamma_permute, dim1=-2, dim2=-1)
+
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), mu.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
 
     @staticmethod
