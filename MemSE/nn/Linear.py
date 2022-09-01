@@ -81,10 +81,6 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 	return mu, gamma, P_tot, gamma_shape
 
 
-def k_linear_layer():
-    pass
-
-
 def linear(module, data):
 	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
 													    data['mu'],
