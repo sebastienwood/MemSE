@@ -126,9 +126,9 @@ class Conv2DUF(nn.Module):
 		c0 = sigma ** 2 / c ** 2
 
 		gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
-		gamma = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
-		gamma = gamma * memse_dict['r'] ** 2
-		return mu, gamma, None
+		gamma_n = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
+		gamma_n *= memse_dict['r'] ** 2
+		return mu, gamma_n, None
 
 	@staticmethod
 	def slow_mse_var(conv2duf: Conv2DUF, memse_dict, c, weights, sigma):
