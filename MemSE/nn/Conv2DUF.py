@@ -15,8 +15,7 @@ class Conv2DUF(nn.Module):
 		self.c = conv
 		self.output_shape = output_shape
 
-		self.register_parameter('original_weight', nn.Parameter(conv.weight.detach().clone()))
-		self.weight = self.original_weight.view(self.c.weight.size(0), -1).t()
+		self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1).t()))
 		if conv.bias is not None:
 			self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
 		else:
@@ -29,7 +28,11 @@ class Conv2DUF(nn.Module):
 		# if self.bias is not None:
 		# 	out += self.bias[:, None, None]
 		# return out
-		return torch.nn.functional.conv2d(x, self.weight.t().reshape(self.original_weight.shape), bias=self.bias, **self.conv_property_dict)
+		return torch.nn.functional.conv2d(x, self.original_weight, bias=self.bias, **self.conv_property_dict)
+
+	@property
+	def original_weight(self):
+		return self.weight.t().reshape(self.c.weight.shape)
 
 	@property
 	def kernel_size(self):
