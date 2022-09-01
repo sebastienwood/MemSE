@@ -20,6 +20,7 @@ SUPPORTED_OPS = {
 	nn.Linear: nnM.linear,
 	nn.Softplus: nnM.Softplus,
 	nn.AvgPool2d: nnM.avgPool2d,
+	nn.AdaptiveAvgPool2d: nnM.avgPool2d,
 	nnM.Conv2DUF: nnM.Conv2DUF.memse,
 	nn.ReLU: nnM.ReLU,
 }
