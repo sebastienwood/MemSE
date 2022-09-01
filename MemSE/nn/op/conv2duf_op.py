@@ -165,8 +165,9 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
                                     j0ji_padded = j0ji - padding[1]
                                     i0pii_padded = i0pii - padding[0]
                                     j0pji_padded = j0pji - padding[1]
+                                    mu_cache = mu[bi]
                                     for ci in range(weight_shape_1):
-                                        v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
+                                        v += (mu_cache[ci, i0ii_padded, j0ji_padded] * mu_cache[ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
