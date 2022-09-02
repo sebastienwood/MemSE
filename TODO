@@ -1,2 +1,8 @@
-[] stride in Conv2DUF @sebastienwood
+[] optimize memory accesses conv2duf_op @sebastienwood
+[] meta-heuristic per layer @sebastienwood
+[] optimize double_conv @sebastienwood
+[] small benchmark suite @sebastienwood
 [] MSE_forward for conv_to_fc layer @sebastienwood
+[] triton conv2duf_op @sebastienwood
+[] ffcv for dataloaders @sebastienwood
+[] energy eq @sebastienwood

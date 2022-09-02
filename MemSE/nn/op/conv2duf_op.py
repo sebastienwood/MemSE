@@ -246,7 +246,8 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), pad
 
 
 if __name__ == '__main__':
-    slow_compare = False
+    from time import time
+    import numpy as np
     wh = 32
     who = wh - 2
     ch = 3
@@ -259,40 +260,14 @@ if __name__ == '__main__':
     if c.dim() == 0:
         c = c.repeat(input.shape[1])
     weight_shape = [ch, ch, 3, 3]
-    
-    ref = conv2duf_op(input.clone(), gamma, mu, c, weight_shape)
-    print(input.mean())
-    print('REF MEAN IS')
-    print(ref.mean())
 
-    if slow_compare:
-        slow = op_slow(input.clone(), gamma, mu, c, weight_shape)
-        assert torch.allclose(slow, ref)
-    print('WITH TIMING')
-    print(timeit.timeit(lambda: conv2duf_op(input.clone(), gamma, mu, c, weight_shape), number=5))
-    for device in [torch.device('cuda:0')]:
-        print('#'*10)
-        print(device)
-        print('#'*10)
-    
-        n = input.clone()#.fill_(0)
-        nb = conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape)
-        print('CANDIDATE MEAN IS')
-        print(nb.mean())
-        assert torch.allclose(ref, nb.to(ref))
-        print('WITH TIMING')
-        print(timeit.timeit(lambda: conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape), number=5))
-
-        # print('Here is taichi')
-        # tai = conv2duf_taichi(input.clone(), gamma, mu, c, weight_shape)
-        # print(tai.mean())
-        # assert torch.allclose(ref, tai)
-        # print(timeit.timeit(lambda: conv2duf_taichi(input.clone(), gamma, mu, c, weight_shape), number=5))
-
-    # device = torch.device('cuda:0')
-    # with profile(activities=[ProfilerActivity.CUDA], profile_memory=True) as prof:
-    #     with record_function("op"):
-    #         conv2duf_op(n.to(device), gamma.to(device), mu.to(device), c.to(device), weight_shape)
-    # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-    # print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-    # prof.export_chrome_trace("trace.json")
+    for d in [torch.device('cpu'), torch.device('cuda:0')]:
+        timings = []
+        input, gamma, mu, c = input.to(d), gamma.to(d), mu.to(d), c.to(d)
+        for _ in range(100):
+            start = time()
+            conv2duf_op(input, gamma, mu, c, weight_shape)
+            timings.append(time() - start)
+                
+        median_time = np.median(timings)
+        print(f'Median time is {median_time}')
