@@ -132,6 +132,7 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
         return
 
     while bi < input.shape[0]:
+        mu_cache = mu[bi]
         while i0 < input.shape[2]:
             while j0 < input.shape[3]:
                 # Iterate on io j0 i0p j0p
@@ -161,7 +162,6 @@ def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_sha
                                     j0ji_padded = j0ji - padding[1]
                                     i0pii_padded = i0pii - padding[0]
                                     j0pji_padded = j0pji - padding[1]
-                                    mu_cache = mu[bi]
                                     gamma_cache = gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded]
                                     # TODO idea: ci last format for coalesced accesses
                                     # TODO shared memory for block at least on bi
@@ -221,7 +221,7 @@ def next_power_of_2(x):
     return 1<<(x-1).bit_length()
 
 
-def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1, **kwargs):
+def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1):
     if isinstance(stride, int):
         stride = (stride, stride)
     if isinstance(dilation, int):
@@ -260,14 +260,17 @@ if __name__ == '__main__':
     if c.dim() == 0:
         c = c.repeat(input.shape[1])
     weight_shape = [ch, ch, 3, 3]
+    res = []
 
     for d in [torch.device('cpu'), torch.device('cuda:0')]:
         timings = []
-        input, gamma, mu, c = input.to(d), gamma.to(d), mu.to(d), c.to(d)
-        for _ in range(100):
+        input_, gamma, mu, c = input.clone().to(d), gamma.to(d), mu.to(d), c.to(d)
+        res.append(conv2duf_op(input_, gamma, mu, c, weight_shape).to('cpu'))
+        for _ in range(10):
             start = time()
-            conv2duf_op(input, gamma, mu, c, weight_shape)
+            conv2duf_op(input_, gamma, mu, c, weight_shape)
             timings.append(time() - start)
                 
         median_time = np.median(timings)
         print(f'Median time is {median_time}')
+    assert torch.allclose(res[0], res[1]), torch.sum((res[0] - res[1]) ** 2)
