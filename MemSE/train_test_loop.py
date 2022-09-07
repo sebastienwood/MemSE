@@ -1,4 +1,5 @@
 import time
+import torch
 from MemSE.MemSE import MemSE
 
 from MemSE.nn import mse_gamma
@@ -85,12 +86,12 @@ def test_mse_th(testloader, model: MemSE, device=None, batch_stop: int = -1):
         inputs, targets = inputs.to(device), targets.to(device)
         model.quanter.denoise()
         mu, gamma, p_tot = model(inputs)
-        pows.extend(p_tot.cpu().tolist())
+        pows.extend(p_tot)
         mse = mse_gamma(targets, mu, gamma)
-        mses.extend(mse.cpu().tolist())
+        mses.extend(mse)
         if batch_stop == batch_idx + 1:
             break
-    return mses, pows
+    return torch.stack(mses), torch.stack(pows)
 
 
 def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, trials=100):
