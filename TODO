@@ -3,6 +3,6 @@
 [] optimize double_conv @sebastienwood
 [] small benchmark suite @sebastienwood
 [] MSE_forward for conv_to_fc layer @sebastienwood
-[] triton conv2duf_op @sebastienwood
 [] ffcv for dataloaders @sebastienwood
 [] energy eq @sebastienwood
+[] optimizer on one given layer @sebastienwood
