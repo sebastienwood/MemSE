@@ -99,8 +99,8 @@ def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Te
 
     #diag_ngp = torch.diagonal(new_gamma_pos_diag, dim1=1, dim2=2)
     #diag_ngn = torch.diagonal(new_gamma_neg_diag, dim1=1, dim2=2)
-    diags =  (new_gamma_pos_diag + torch.square(new_mu_pos) + new_gamma_neg_diag + torch.square(new_mu_neg)) # (diag_ngp + torch.square(new_mu_pos) + diag_ngn + torch.square(new_mu_neg))
-    return mu_r + oe.contract('i,bi->b',torch.square(c), diags)/r
+    diags = (new_gamma_pos_diag + torch.square(new_mu_pos) + new_gamma_neg_diag + torch.square(new_mu_neg)) # (diag_ngp + torch.square(new_mu_pos) + diag_ngn + torch.square(new_mu_neg))
+    return (mu_r + oe.contract('i,bi->b',torch.square(c), diags)) / r
 
 
 #@torch.jit.script
