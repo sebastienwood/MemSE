@@ -5,7 +5,6 @@ if CUDASIM:
     os.environ['NUMBA_ENABLE_CUDASIM'] = '1'
 
 import os
-import timeit
 from typing import List, Tuple
 
 import math
@@ -14,9 +13,6 @@ import torch
 import opt_einsum as oe
 from torch.autograd import Function
 from numba import njit, prange, cuda
-
-
-TUBE = None
 
 module_path = os.path.dirname(__file__)
 
@@ -32,7 +28,7 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
                         strided_i0p = i0p * stride[0]
                         strided_j0 = j0 * stride[1]
                         strided_j0p = j0p * stride[1]
-                        v = 0.
+                        v = numba.float32(0.)
                         for ii in range(weight_shape_2):
                             # Virtual padding
                             i0ii = strided_i0 + ii
@@ -60,136 +56,16 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
 
 
 @cuda.jit
-def op_numba_c(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
-    sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
-    bi = cuda.grid(1)
-    x_gridsize = cuda.gridsize(1)
-    threadB = cuda.threadIdx.x
-
-    if threadB < c.shape[0]:
-        sharedC[threadB] = c[threadB]
-    if cuda.blockDim.x < c.shape[0] and threadB == 0:  # not covering all values
-        for i in range(cuda.blockDim.x, c.shape[0]):
-            sharedC[i] = c[i]
-
-    cuda.syncthreads()
-
-    if bi > input.shape[0]:
-        return
-
-    while bi < input.shape[0]:
-        # Iterate on io j0 i0p j0p
-        for i0 in range(input.shape[2]):
-            for j0 in range(input.shape[3]):
-                for i0p in range(input.shape[5]):
-                    for j0p in range(input.shape[6]):
-                        strided_i0 = i0 * stride[0]
-                        strided_i0p = i0p * stride[0]
-                        strided_j0 = j0 * stride[1]
-                        strided_j0p = j0p * stride[1]
-                        v = numba.float32(0.)
-                        for ii in range(weight_shape_2):
-                            # Virtual padding
-                            i0ii = strided_i0 + ii
-                            i0pii = strided_i0p + ii
-                            oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
-                            oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
-                            if oob_0 or oob_0p:
-                                continue
-                            for ji in range(weight_shape_3):
-                                j0ji = strided_j0 + ji
-                                j0pji = strided_j0p + ji
-                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
-                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
-                                if not oob_0j and not oob_0pj:
-                                    # Recenter on actual coords
-                                    i0ii_padded = i0ii - padding[0]
-                                    j0ji_padded = j0ji - padding[1]
-                                    i0pii_padded = i0pii - padding[0]
-                                    j0pji_padded = j0pji - padding[1]
-                                    for ci in range(weight_shape_1):
-                                        v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
-                        for c0 in range(input.shape[1]):
-                            cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
-        bi += x_gridsize
-
-
-@cuda.jit
-def op_numba_c_f(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
-    sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
+def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
+    sharedC = cuda.shared.array(shape=512, dtype=numba.float32)
     bi, i0, j0 = cuda.grid(3)
     x_gridsize, y_gridsize, z_gridsize = cuda.gridsize(3)
-    threadB = cuda.threadIdx.x
 
-    if threadB < c.shape[0]:
-        sharedC[threadB] = c[threadB]
-    if cuda.blockDim.x < c.shape[0] and threadB == 0:  # not covering all values
-        for i in range(cuda.blockDim.x, c.shape[0]):
-            sharedC[i] = c[i]
-
-    cuda.syncthreads()
-
-    if bi > input.shape[0] or i0 > input.shape[2] or j0 > input.shape[3]:
-        return
-
-    while bi < input.shape[0]:
-        mu_cache = mu[bi] # TODO put in shared and update
-        while i0 < input.shape[2]:
-            while j0 < input.shape[3]:
-                # Iterate on io j0 i0p j0p
-                for i0p in range(input.shape[5]):
-                    for j0p in range(input.shape[6]):
-                        strided_i0 = i0 * stride[0]
-                        strided_i0p = i0p * stride[0]
-                        strided_j0 = j0 * stride[1]
-                        strided_j0p = j0p * stride[1]
-                        v = numba.float32(0.)
-                        for ii in range(weight_shape_2):
-                            # Virtual padding
-                            i0ii = strided_i0 + ii
-                            i0pii = strided_i0p + ii
-                            oob_0 = i0ii < padding[0] or i0ii >= mu.shape[2] + padding[0]
-                            oob_0p = i0pii < padding[0] or i0pii >= mu.shape[2] + padding[0]
-                            if oob_0 or oob_0p:
-                                continue
-                            for ji in range(weight_shape_3):
-                                j0ji = strided_j0 + ji
-                                j0pji = strided_j0p + ji
-                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= mu.shape[3] + padding[1]
-                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= mu.shape[3] + padding[1]
-                                if not oob_0j and not oob_0pj:
-                                    # Recenter on actual coords
-                                    i0ii_padded = i0ii - padding[0]
-                                    j0ji_padded = j0ji - padding[1]
-                                    i0pii_padded = i0pii - padding[0]
-                                    j0pji_padded = j0pji - padding[1]
-                                    gamma_cache = gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded]
-                                    # TODO idea: ci last format for coalesced accesses
-                                    # TODO shared memory for block at least on bi
-                                    for ci in range(weight_shape_1):
-                                        #v += (mu_cache[ci, i0ii_padded, j0ji_padded] * mu_cache[ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
-                                        v += (mu_cache[i0ii_padded, j0ji_padded, ci] * mu_cache[i0pii_padded, j0pji_padded, ci] + gamma_cache[ci])
-                        # For each c0 update input
-                        for c0 in range(input.shape[1]):
-                            cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
-                j0 += z_gridsize
-            i0 += y_gridsize
-        bi += x_gridsize
-
-@cuda.jit
-def op_numba_w(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
-    sharedC = cuda.shared.array(shape=1024, dtype=numba.float32)
-    sharedG = cuda.shared.array(shape=1024, dtype=numba.float32)
-    bi, i0, j0 = cuda.grid(3)
-    x_gridsize, y_gridsize, z_gridsize = cuda.gridsize(3)
-    threadB = cuda.threadIdx.x
-    threadI = cuda.threadIdx.y
-    threadJ = cuda.threadIdx.z
-
-    tx = cuda.threadIdx.x
-    while tx < c.shape[0]:
-        sharedC[tx] = c[tx]
-        tx += x_gridsize
+    if cuda.threadIdx.y == 0 and cuda.threadIdx.z == 0:
+        tB = cuda.threadIdx.x
+        while tB < c.shape[0]:
+            sharedC[tB] = c[tB]
+            tB += cuda.blockDim.x
     cuda.syncthreads()
 
     if bi > input.shape[0] or i0 > input.shape[2] or j0 > input.shape[3]:
@@ -219,28 +95,114 @@ def op_numba_w(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, 
                                 j0pji = strided_j0p + ji
                                 oob_0j = oob_0 or j0ji < padding[1] or j0ji >= gamma.shape[2] + padding[1]
                                 oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= gamma.shape[2] + padding[1]
-                                
-                                # Recenter on actual coords
-                                i0ii_padded = i0ii - padding[0]
-                                j0ji_padded = j0ji - padding[1]
-                                i0pii_padded = i0pii - padding[0]
-                                j0pji_padded = j0pji - padding[1]
-                                # tx = cuda.threadIdx.x
-                                # while tx < gamma.shape[5]:
-                                #     sharedG[tx] = gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, tx]
-                                #     tx += x_gridsize
-                                # cuda.syncthreads()
-
                                 if not oob_0j and not oob_0pj:
-                                    g_c = gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded]
+                                    # Recenter on actual coords
+                                    i0ii_padded = i0ii - padding[0]
+                                    j0ji_padded = j0ji - padding[1]
+                                    i0pii_padded = i0pii - padding[0]
+                                    j0pji_padded = j0pji - padding[1]
+                                    gamma_cache = gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded]
                                     for ci in range(weight_shape_1):
-                                        v += g_c[ci]
+                                        v += gamma_cache[ci]
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
                             cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
                 j0 += z_gridsize
             i0 += y_gridsize
         bi += x_gridsize
+
+
+_WARPSIZE = 32
+_NUMWARPS = 4
+max_blocksize = _NUMWARPS * _WARPSIZE
+inner_sm_size = _WARPSIZE + 1
+@cuda.jit(device=True, inline=True)
+def warpReduceSum(val):
+    offset = _WARPSIZE // 2
+    while offset:
+        val += cuda.shfl_down_sync(cuda.activemask(), val, offset)
+        offset //= 2
+    return val
+
+@cuda.jit(device=True, inline=True)
+def blockReduceSum(val, sm_partial):
+    shared = sm_partial[cuda.threadIdx.x]
+    lane = cuda.threadIdx.x % _WARPSIZE
+    wid = cuda.threadIdx.x // _WARPSIZE
+    val = warpReduceSum(val)
+    if lane == 0:
+        shared[wid] = val
+    cuda.syncthreads()
+    val = shared[lane] if cuda.threadIdx.x < cuda.blockDim.x / _WARPSIZE else 0.
+    if wid == 0:
+        val = warpReduceSum(val)
+    return val
+
+
+@cuda.jit
+def op_numba_w(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
+    sharedC = cuda.shared.array(shape=512, dtype=numba.float32)
+    sm_partials = cuda.shared.array((_NUMWARPS, inner_sm_size), dtype=numba.float32)
+    xi, bi = cuda.grid(2)
+    x_gridsize, y_gridsize = cuda.gridsize(2)
+    threadX = cuda.threadIdx.x
+    threadB = cuda.threadIdx.y
+
+    if threadB == 0:
+        tx = cuda.threadIdx.x
+        while tx < c.shape[0]:
+            sharedC[tx] = c[tx]
+            tx += cuda.blockDim.x
+    cuda.syncthreads()
+
+    if bi > input.shape[0] or xi > gamma.shape[5]:
+        return
+
+    while bi < input.shape[0]:
+        # TODO bi reparted on i0j0i0pj0p as well (good when small batches)
+        for i0 in range(input.shape[2]):
+            for j0 in range(input.shape[3]):
+                # Iterate on io j0 i0p j0p
+                for i0p in range(input.shape[5]):
+                    for j0p in range(input.shape[6]):
+                        strided_i0 = i0 * stride[0]
+                        strided_i0p = i0p * stride[0]
+                        strided_j0 = j0 * stride[1]
+                        strided_j0p = j0p * stride[1]
+
+                        v = numba.float32(0.)
+                        for ii in range(weight_shape_2):
+                            # Virtual padding
+                            i0ii = strided_i0 + ii
+                            i0pii = strided_i0p + ii
+                            oob_0 = i0ii < padding[0] or i0ii >= gamma.shape[1] + padding[0]
+                            oob_0p = i0pii < padding[0] or i0pii >= gamma.shape[1] + padding[0]
+                            if oob_0 or oob_0p:
+                                continue
+                            for ji in range(weight_shape_3):
+                                j0ji = strided_j0 + ji
+                                j0pji = strided_j0p + ji
+                                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= gamma.shape[2] + padding[1]
+                                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= gamma.shape[2] + padding[1]
+                                
+                                if not oob_0j and not oob_0pj:
+                                    # Recenter on actual coords
+                                    i0ii_padded = i0ii - padding[0]
+                                    j0ji_padded = j0ji - padding[1]
+                                    i0pii_padded = i0pii - padding[0]
+                                    j0pji_padded = j0pji - padding[1]
+                                    i = xi
+                                    while i < weight_shape_1:
+                                        v += gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, i] #+ gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, i+cuda.blockDim.x]
+                                        i += x_gridsize
+                                
+                        v = blockReduceSum(v, sm_partials)
+                        # For each c0 update input
+                        tix = threadX
+                        while tix < input.shape[1]:
+                            cuda.atomic.add(input, (bi, tix, i0, j0, tix, i0p, j0p), v * sharedC[tix])
+                            tix += cuda.blockDim.x
+        bi += y_gridsize
 
 
 class Conv2DUF_op(Function):
@@ -253,32 +215,17 @@ class Conv2DUF_op(Function):
         return grad_out
 
 
-TEST = True
+TEST = False
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, mu: torch.Tensor, c, weight_shape, padding, stride):
         cuda.select_device(int(str(input.device).split(':')[1]))
-        # TODO batch heavy/small filters is longer in any case
-        if False and input.shape[2] * input.shape[3] < input.shape[0]:
-            threadsperblock= (min(1024,next_power_of_2(input.shape[0])),)# 4)
-            blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
-
-            blockspergrid = (blockspergrid_x,)# blockspergrid_y)
-            op_numba_c[blockspergrid, threadsperblock](input, gamma, mu, c, weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
-        elif TEST:
-            threadsperblock= (8,8,8)# 4)
-            blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
-            blockspergrid_y = math.ceil(input.shape[2] / threadsperblock[1])
-            blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
-
-            blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-
-            with torch.no_grad():
-                gamma_permute = torch.permute(gamma.detach(), (0, 2, 3, 5, 6, 1, 4))
-                gamma_permute = torch.diagonal(gamma_permute, dim1=-2, dim2=-1).contiguous()
-                mu_permute = torch.permute(mu.detach(), (0, 2, 3, 1)).contiguous()
-                gamma_permute += torch.diagonal(oe.contract('bijc,bklm->bijklcm', mu_permute, mu_permute), dim1=-2, dim2=-1).contiguous()
-
+        if TEST:
+            gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
+            threadsperblock= (8, 64)
+            blockspergrid_x = min(math.ceil((weight_shape[1] + threadsperblock[0] - 1) / threadsperblock[0]), 1024)
+            blockspergrid_y = min(math.ceil((input.shape[0] + threadsperblock[1] - 1)/ threadsperblock[1]), 1024)
+            blockspergrid = (blockspergrid_x, blockspergrid_y)
             op_numba_w[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         else:
             threadsperblock= (8,8,8)# 4)
@@ -288,12 +235,9 @@ class Conv2DUF_op_CUDA(Function):
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
 
-            with torch.no_grad():
-                gamma_permute = torch.permute(gamma.detach(), (0, 2, 3, 5, 6, 1, 4))
-                gamma_permute = torch.diagonal(gamma_permute, dim1=-2, dim2=-1).contiguous()
-                mu_permute = torch.permute(mu.detach(), (0, 2, 3, 1)).contiguous()
+            gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
 
-            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), mu_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
 
     @staticmethod
@@ -350,11 +294,11 @@ if __name__ == '__main__':
         timings = []
         input_, gamma, mu, c = input.clone().to(d), gamma.to(d), mu.to(d), c.to(d)
         res.append(conv2duf_op(input_, gamma, mu, c, weight_shape).to('cpu'))
-        for _ in range(100):
-            start = time()
-            conv2duf_op(input_, gamma, mu, c, weight_shape)
-            timings.append(time() - start)
+        # for _ in range(100):
+        #     start = time()
+        #     conv2duf_op(input_, gamma, mu, c, weight_shape)
+        #     timings.append(time() - start)
                 
-        median_time = np.median(timings)
-        print(f'Median time is {median_time}')
-    #assert torch.allclose(res[0], res[1]), torch.sum((res[0] - res[1]) ** 2)
+        # median_time = np.median(timings)
+        # print(f'Median time is {median_time}')
+    assert torch.allclose(res[0], res[1]), torch.mean((res[0] - res[1]) ** 2)

@@ -5,12 +5,10 @@ import math
 __all__ = ['small_vgg', 'really_small_vgg', 'smallest_vgg','small_vgg_ReLU', 'really_small_vgg_ReLU', 'smallest_vgg_ReLU']
 
 class VGG(nn.Module):
-    def __init__(self, features, num_classes=1000):
+    def __init__(self, features, num_classes=1000, classifier_size: int = 16):
         super(VGG, self).__init__()
         self.features = features
-        #self.classifier = nn.Linear(512, num_classes, bias=False)
-        #self.classifier = nn.Linear(128, num_classes, bias=False)
-        self.classifier = nn.Linear(16, num_classes, bias=False)
+        self.classifier = nn.Linear(classifier_size, num_classes, bias=False)
         self._initialize_weights()
 
     def forward(self, x):
@@ -92,7 +90,8 @@ def small_vgg(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers(cfg['small_vgg'], batch_norm=False), **kwargs)
+    method = kwargs.pop('activation', nn.Softplus)
+    model = VGG(make_layers(cfg['small_vgg'], batch_norm=False, method=method), classifier_size=512, **kwargs)
     return model
 
 def really_small_vgg(**kwargs):
@@ -100,7 +99,8 @@ def really_small_vgg(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers(cfg['really_small_vgg'], batch_norm=False), **kwargs)
+    method = kwargs.pop('activation', nn.Softplus)
+    model = VGG(make_layers(cfg['really_small_vgg'], batch_norm=False, method=method), classifier_size=128, **kwargs)
     return model
 
 def smallest_vgg(**kwargs):
@@ -108,7 +108,8 @@ def smallest_vgg(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers(cfg['smallest_vgg'], batch_norm=False), **kwargs)
+    method = kwargs.pop('activation', nn.Softplus)
+    model = VGG(make_layers(cfg['smallest_vgg'], batch_norm=False, method=method), **kwargs)
     return model
 
 
@@ -117,16 +118,14 @@ def small_vgg_ReLU(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers_ReLU(cfg['small_vgg'], batch_norm=False), **kwargs)
-    return model
+    return small_vgg(activation=nn.ReLU)
 
 def really_small_vgg_ReLU(**kwargs):
     """Small VGG model
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = VGG(make_layers_ReLU(cfg['really_small_vgg'], batch_norm=False), **kwargs)
-    return model
+    return really_small_vgg(activation=nn.ReLU)
 
 def smallest_vgg_ReLU(**kwargs):
     """Small VGG model
@@ -137,5 +136,5 @@ def smallest_vgg_ReLU(**kwargs):
     if features_only:
         model = make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False)
     else:
-        model = VGG(make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False), **kwargs)
+        model = smallest_vgg(activation=nn.ReLU)
     return model
