@@ -235,7 +235,7 @@ class Conv2DUF_op_CUDA(Function):
 
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
 
-            gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
+            gamma_permute = torch.diagonal(torch.einsum('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
 
             op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
