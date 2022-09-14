@@ -111,7 +111,7 @@ def double_conv(tensor: torch.Tensor,
                 dilation: List[int] = (1, 1),
                 groups: int = 1,
                 dtype: torch.dtype = torch.float16,
-                memory_format = torch.channels_last):
+                memory_format: torch.memory_format = torch.channels_last):
     '''A doubly convolution for tensor of shape [bijkijk]'''
     #if tensor.is_cuda:
     #    assert torch.backends.cudnn.version() >= 7603, 'Optimization requires updated CudNN libraries >= v7.6'
@@ -164,10 +164,9 @@ if __name__ == '__main__':
     import numpy as np
     device = torch.device('cuda:0')
     unscripted = double_conv
-    scripted = torch.jit.script(double_conv)
     inp = torch.rand(32, 3, 32, 32, 3, 32, 32, device=device)
     w = torch.rand(3, 3, 3, 3, device=device)
-    for n, m in {'us': unscripted, 's': scripted}.items():
+    for n, m in {'us': unscripted}.items(): # , 's': torch.jit.script(double_conv)
         for dt in [torch.float16, torch.float32]:
             for memf in [torch.channels_last, torch.contiguous_format]:
                 timings = []
