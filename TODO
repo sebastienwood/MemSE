@@ -5,4 +5,3 @@
 [] MSE_forward for conv_to_fc layer @sebastienwood
 [] ffcv for dataloaders @sebastienwood
 [] energy eq @sebastienwood
-[] optimizer on one given layer @sebastienwood

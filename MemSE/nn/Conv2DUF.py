@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from numba import njit, prange
+from torchtyping import TensorType
 
 from .op import conv2duf_op
 from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
@@ -81,7 +82,7 @@ class Conv2DUF(nn.Module):
             new_mu_pos, new_gamma_pos, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, Gpos, memse_dict['sigma'])
             new_mu_neg, new_gamma_neg, _ = conv2duf.mse_var(conv2duf, memse_dict, ct, Gneg, memse_dict['sigma'])
 
-            P_tot = energy_vec_batched(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
+            P_tot = conv2duf.energy(ct, conv2duf.weight, gamma, mu, new_gamma_pos, new_mu_pos, new_gamma_neg, new_mu_neg, memse_dict['r'], gamma_shape=memse_dict['gamma_shape'])
         else:
             P_tot = 0.
 
@@ -104,3 +105,20 @@ class Conv2DUF(nn.Module):
         gamma_n = conv2duf_op(gamma_n, gamma, memse_dict['mu'], c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
         gamma_n *= memse_dict['r'] ** 2
         return mu, gamma_n, None
+
+    @staticmethod
+    def energy(conv2duf: Conv2DUF,
+               x: TensorType["batch", "channel_in", "width", "height"],
+               z: TensorType["batch", "channel_out", "width_out", "height_out"],
+               gamma: TensorType["batch", "channel_in", "width", "height", "channel_in", "width", "height"],
+               c: TensorType["channel_out"],
+               w: TensorType["channel_out", "channel_in", "width", "height"]):
+        sum_x_gd: torch.TensorType = gamma_to_diag(gamma) + x ** 2
+        abs_w: torch.TensorType = torch.einsum('coij,c->coij', torch.abs(w), c)
+        e_p_mem: torch.TensorType = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, **conv2duf.conv_property_dict), dim=0, keepdim=True)
+
+        Gpos = torch.clip(w, min=0)
+        Gneg = torch.clip(-w, min=0)
+        zp = conv2duf.forward(x, Gpos)
+        zm = conv2duf.forward(x, Gneg)
+        

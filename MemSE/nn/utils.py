@@ -106,27 +106,29 @@ def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Te
 #@torch.jit.script
 def double_conv(tensor: torch.Tensor, weight: torch.Tensor, stride: List[int] = (1, 1), padding: List[int] = (1, 1), dilation: List[int] = (1, 1), groups: int = 1):
     '''A doubly convolution for tensor of shape [bijkijk]'''
+    #if tensor.is_cuda:
+    #    assert torch.backends.cudnn.version() >= 7603, 'Optimization requires updated CudNN libraries >= v7.6'
+    weight = weight.half().to(memory_format=torch.channels_last)
+    tensor = tensor.half()
+
     # TODO not so sure it works for grouped convolutions
     bs = tensor.shape[0]
-    nc = tensor.shape[1]
     img_shape = tensor.shape[1:4]
 
-    nice_view = tensor.reshape(-1, img_shape[0], img_shape[1], img_shape[2])
-    nc_first = nice_view.shape[1]
+    nice_view = tensor.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=torch.channels_last)
     first_res = torch.nn.functional.conv2d(input=nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
     first_res_shape = first_res.shape
     nice_view_res = first_res.view(bs, img_shape[0], img_shape[1], img_shape[2], first_res_shape[1], first_res_shape[2], first_res_shape[3])
 
     permuted = nice_view_res.permute(0, 4, 5, 6, 1, 2, 3)
-    another_nice_view = permuted.reshape(-1, img_shape[0], img_shape[1], img_shape[2])
-    nc_second = another_nice_view.shape[1]
+    another_nice_view = permuted.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=torch.channels_last)
     second_res = torch.nn.functional.conv2d(input=another_nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
     second_res_shape = second_res.shape
     anv_res = second_res.view(bs, first_res_shape[1], first_res_shape[2], first_res_shape[3], second_res_shape[1], second_res_shape[2], second_res_shape[3])
 
-    return anv_res.permute(0, 4, 5, 6, 1, 2, 3)
+    return anv_res.permute(0, 4, 5, 6, 1, 2, 3).to(memory_format=torch.contiguous_format)
 
 
 def gamma_to_diag(tensor, flatten=False):
