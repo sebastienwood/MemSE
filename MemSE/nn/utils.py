@@ -177,4 +177,4 @@ if __name__ == '__main__':
                     timings.append(time() - start)
                         
                 median_time = np.median(timings)
-                print(f'Median time is {median_time} ({n=} {memf=} {dt=})')
+                print(f'Median time is {median_time} ({n} {memf} {dt})')
