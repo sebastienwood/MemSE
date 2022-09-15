@@ -91,7 +91,7 @@ def small_vgg(**kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     method = kwargs.pop('activation', nn.Softplus)
-    model = VGG(make_layers(cfg['small_vgg'], batch_norm=False, method=method), classifier_size=512, **kwargs)
+    model = VGG(make_layers(cfg['small_vgg'], batch_norm=False, activation=method), classifier_size=512, **kwargs)
     return model
 
 def really_small_vgg(**kwargs):
@@ -100,7 +100,7 @@ def really_small_vgg(**kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     method = kwargs.pop('activation', nn.Softplus)
-    model = VGG(make_layers(cfg['really_small_vgg'], batch_norm=False, method=method), classifier_size=128, **kwargs)
+    model = VGG(make_layers(cfg['really_small_vgg'], batch_norm=False, activation=method), classifier_size=128, **kwargs)
     return model
 
 def smallest_vgg(**kwargs):
@@ -109,7 +109,7 @@ def smallest_vgg(**kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     method = kwargs.pop('activation', nn.Softplus)
-    model = VGG(make_layers(cfg['smallest_vgg'], batch_norm=False, method=method), **kwargs)
+    model = VGG(make_layers(cfg['smallest_vgg'], batch_norm=False, activation=method), **kwargs)
     return model
 
 
