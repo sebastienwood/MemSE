@@ -14,6 +14,8 @@ import opt_einsum as oe
 from torch.autograd import Function
 from numba import njit, prange, cuda
 
+from conv2duf_opt import op_numba_w
+
 module_path = os.path.dirname(__file__)
 
 
@@ -106,104 +108,11 @@ def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3
                                         v += gamma_cache[ci]
                         # For each c0 update input
                         for c0 in range(input.shape[1]):
-                            cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
+                            input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
+                            #cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
                 j0 += z_gridsize
             i0 += y_gridsize
         bi += x_gridsize
-
-
-_WARPSIZE = 32
-_NUMWARPS = 4
-max_blocksize = _NUMWARPS * _WARPSIZE
-inner_sm_size = _WARPSIZE + 1
-@cuda.jit(device=True, inline=True)
-def warpReduceSum(val):
-    offset = _WARPSIZE // 2
-    while offset:
-        val += cuda.shfl_down_sync(cuda.activemask(), val, offset)
-        offset //= 2
-    return val
-
-@cuda.jit(device=True, inline=True)
-def blockReduceSum(val, sm_partial):
-    shared = sm_partial[cuda.threadIdx.x]
-    lane = cuda.threadIdx.x % _WARPSIZE
-    wid = cuda.threadIdx.x // _WARPSIZE
-    val = warpReduceSum(val)
-    if lane == 0:
-        shared[wid] = val
-    cuda.syncthreads()
-    val = shared[lane] if cuda.threadIdx.x < cuda.blockDim.x / _WARPSIZE else 0.
-    if wid == 0:
-        val = warpReduceSum(val)
-    return val
-
-
-@cuda.jit
-def op_numba_w(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
-    sharedC = cuda.shared.array(shape=512, dtype=numba.float32)
-    sm_partials = cuda.shared.array((_NUMWARPS, inner_sm_size), dtype=numba.float32)
-    xi, bi = cuda.grid(2)
-    x_gridsize, y_gridsize = cuda.gridsize(2)
-    threadX = cuda.threadIdx.x
-    threadB = cuda.threadIdx.y
-
-    if threadB == 0:
-        tx = cuda.threadIdx.x
-        while tx < c.shape[0]:
-            sharedC[tx] = c[tx]
-            tx += cuda.blockDim.x
-    cuda.syncthreads()
-
-    if bi > input.shape[0] or xi > gamma.shape[5]:
-        return
-
-    grid_bi = input.shape[0] * input.shape[2] * input.shape[3] * input.shape[5] * input.shape[6]
-    while bi < grid_bi:
-        bi_ = bi % input.shape[0]
-        i0 = bi // input.shape[0] % input.shape[2]
-        j0 = bi // (input.shape[0] * input.shape[2]) % input.shape[3]
-        i0p = bi // (input.shape[0] * input.shape[2] * input.shape[3]) % input.shape[5]
-        j0p = bi // (input.shape[0] * input.shape[2] * input.shape[3] * input.shape[5]) % input.shape[6]
-
-        strided_i0 = i0 * stride[0]
-        strided_i0p = i0p * stride[0]
-        strided_j0 = j0 * stride[1]
-        strided_j0p = j0p * stride[1]
-
-        v = numba.float32(0.)
-        for ii in range(weight_shape_2):
-            # Virtual padding
-            i0ii = strided_i0 + ii
-            i0pii = strided_i0p + ii
-            oob_0 = i0ii < padding[0] or i0ii >= gamma.shape[1] + padding[0]
-            oob_0p = i0pii < padding[0] or i0pii >= gamma.shape[1] + padding[0]
-            if oob_0 or oob_0p:
-                continue
-            for ji in range(weight_shape_3):
-                j0ji = strided_j0 + ji
-                j0pji = strided_j0p + ji
-                oob_0j = oob_0 or j0ji < padding[1] or j0ji >= gamma.shape[2] + padding[1]
-                oob_0pj = oob_0p or j0pji < padding[1] or j0pji >= gamma.shape[2] + padding[1]
-                
-                if not oob_0j and not oob_0pj:
-                    # Recenter on actual coords
-                    i0ii_padded = i0ii - padding[0]
-                    j0ji_padded = j0ji - padding[1]
-                    i0pii_padded = i0pii - padding[0]
-                    j0pji_padded = j0pji - padding[1]
-                    i = xi
-                    while i < weight_shape_1:
-                        v += gamma[bi_, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, i] #+ gamma[bi, i0ii_padded, j0ji_padded, i0pii_padded, j0pji_padded, i+cuda.blockDim.x]
-                        i += x_gridsize
-                
-        v = blockReduceSum(v, sm_partials)
-        # For each c0 update input
-        tix = threadX
-        while tix < input.shape[1]:
-            cuda.atomic.add(input, (bi_, tix, i0, j0, tix, i0p, j0p), v * sharedC[tix])
-            tix += cuda.blockDim.x
-        bi += y_gridsize
 
 
 class Conv2DUF_op(Function):
@@ -238,7 +147,6 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
 
             gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
-
             op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
 
@@ -292,7 +200,7 @@ if __name__ == '__main__':
     weight_shape = [ch, ch, 3, 3]
     res = []
 
-    profile = True
+    profile = False
     dd = [torch.device('cuda:0')]
     if not profile:
         dd.insert(0, torch.device('cpu'))
@@ -300,11 +208,11 @@ if __name__ == '__main__':
         timings = []
         input_, gamma, mu, c = input.clone().to(d), gamma.to(d), mu.to(d), c.to(d)
         res.append(conv2duf_op(input_, gamma, mu, c, weight_shape).to('cpu'))
-        for _ in range(100):
-            start = time()
-            conv2duf_op(input_, gamma, mu, c, weight_shape)
-            timings.append(time() - start)
+        # for _ in range(100):
+        #     start = time()
+        #     conv2duf_op(input_, gamma, mu, c, weight_shape)
+        #     timings.append(time() - start)
                 
-        median_time = np.median(timings)
-        print(f'Median time is {median_time}')
+        # median_time = np.median(timings)
+        # print(f'Median time is {median_time}')
     assert torch.allclose(res[0], res[1]), torch.mean((res[0] - res[1]) ** 2)
