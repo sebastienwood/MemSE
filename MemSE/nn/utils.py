@@ -113,10 +113,12 @@ def double_conv(tensor: torch.Tensor,
                 dtype: torch.dtype = torch.float16,
                 memory_format: torch.memory_format = torch.channels_last):
     '''A doubly convolution for tensor of shape [bijkijk]'''
-    #if tensor.is_cuda:
-    #    assert torch.backends.cudnn.version() >= 7603, 'Optimization requires updated CudNN libraries >= v7.6'
-    weight = weight.to(dtype=dtype, memory_format=memory_format)
-    tensor = tensor.to(dtype=dtype)
+    if tensor.is_cuda:
+        assert torch.backends.cudnn.version() >= 7603, 'Optimization requires updated CudNN libraries >= v7.6'
+        weight = weight.to(dtype=dtype, memory_format=memory_format)
+        tensor = tensor.to(dtype=dtype)
+    else:
+        weight = weight.to(memory_format=memory_format)
 
     # TODO not so sure it works for grouped convolutions
     bs = tensor.shape[0]
