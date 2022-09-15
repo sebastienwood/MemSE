@@ -118,14 +118,14 @@ def small_vgg_ReLU(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    return small_vgg(activation=nn.ReLU)
+    return small_vgg(activation=nn.ReLU, **kwargs)
 
 def really_small_vgg_ReLU(**kwargs):
     """Small VGG model
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    return really_small_vgg(activation=nn.ReLU)
+    return really_small_vgg(activation=nn.ReLU, **kwargs)
 
 def smallest_vgg_ReLU(**kwargs):
     """Small VGG model
@@ -136,5 +136,5 @@ def smallest_vgg_ReLU(**kwargs):
     if features_only:
         model = make_layers_ReLU(cfg['smallest_vgg'], batch_norm=False)
     else:
-        model = smallest_vgg(activation=nn.ReLU)
+        model = smallest_vgg(activation=nn.ReLU, **kwargs)
     return model
