@@ -53,7 +53,7 @@ class OptimizerBase:
         self.memse.unquant()
         return torch.mean(pows), torch.mean(torch.amax(mses),dim=1)
 
-    def optimize(self, parameters: List[Parameters], constraints);
+    def optimize(self, parameters: List[Parameters], constraints):
         ckpt = Path(f"ckpt_"+str(power_budget)+type_opt+".npy")
         if ckpt.is_file():
             pass

@@ -14,7 +14,7 @@ import opt_einsum as oe
 from torch.autograd import Function
 from numba import njit, prange, cuda
 
-from conv2duf_opt import op_numba_w
+from MemSE.nn.op.conv2duf_opt import op_numba_w
 
 module_path = os.path.dirname(__file__)
 
