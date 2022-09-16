@@ -32,7 +32,7 @@ _ = MemSE.init_learnt_gmax(quanter)
 quanter.quant()
 ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
 with torch.no_grad():
-    mu, gamma, _ = Conv2DUF.mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
+    mu, gamma, _ = Conv2DUF.mse_var(conv2duf, inp, memse_dict['gamma'], memse_dict['gamma_shape'], memse_dict['r'], ct, conv2duf.original_weight)
     mu_slow, gamma_slow, _ = Conv2DUF.slow_mse_var(conv2duf, memse_dict, ct, conv2duf.original_weight, SIGMA)
 
 def test_eq_impl():

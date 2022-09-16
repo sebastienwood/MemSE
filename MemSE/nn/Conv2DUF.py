@@ -115,10 +115,12 @@ class Conv2DUF(nn.Module):
         # TODO
         # gamma only diag kernels at the end
         # if gamma shape is not None
-        #  skip double conv, init input as zero based on mu shape
         #  in conv2duf_op, have a version without gamma (reduced memory accesses)
         # gamma is 100% initialized after one conv2duf so return None for gamma_shape
-        gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+        if gamma_shape is None:
+            gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+        else:
+            gamma_n = torch.zeros(mu.shape + mu.shape[1:], device=mu.device, dtype=mu.dtype)
         gamma_n = conv2duf_op(gamma_n, gamma, input, c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
         gamma_n *= r ** 2
         return mu, gamma_n, None
