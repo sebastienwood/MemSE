@@ -43,26 +43,29 @@ class ReLU_(MemSEAct):
     __type__ = 'ReLU'
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
-        sigma = torch.sqrt(sigma_2)
+        @torch.jit
+        def f(mu: torch.Tensor, sigma_2: torch.Tensor):
+            sigma = torch.sqrt(sigma_2)
 
-        # séparer positifs et nuls
-        # pour le spositifs -> calculs
-        # pour les nuls -> mu_p = relu(mu)
-        # pour gamma_p les nuls -> 0
+            # séparer positifs et nuls
+            # pour le spositifs -> calculs
+            # pour les nuls -> mu_p = relu(mu)
+            # pour gamma_p les nuls -> 0
 
-        first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
-        second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
+            first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
+            second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
 
-        mu_p = first_m + mu * second_m
+            mu_p = first_m + mu * second_m
 
-        first_g = mu * first_m
-        second_g = (sigma_2+torch.square(mu)) * second_m
-        gamma_p = first_g + second_g - mu_p ** 2
+            first_g = mu * first_m
+            second_g = (sigma_2+torch.square(mu)) * second_m
+            gamma_p = first_g + second_g - mu_p ** 2
 
-        mu_p = torch.where(sigma > 0, mu_p, torch.relu(mu))
-        gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
-        
-        return mu_p, gamma_p
+            mu_p = torch.where(sigma > 0, mu_p, torch.relu(mu))
+            gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
+            
+            return mu_p, gamma_p
+        return f(mu, sigma_2)
 
     @classmethod
     def derivatives(cls, module, data, mu):

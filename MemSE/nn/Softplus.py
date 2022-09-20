@@ -120,8 +120,10 @@ class Softplus_(MemSEAct):
 	__max_taylor__ = 6
 	@staticmethod
 	def main(module, data, mu, sigma_2, derivatives):
+		import warnings
 		degree_taylor = data['taylor_order']
 		mu_r = torch.nn.functional.softplus(mu, beta=module.beta, threshold=module.threshold)
+		warnings.Warn("Softplus may not work properly in presence of 2dim inputs yet")
 
 		if degree_taylor >= 2:
 			mu_r += 0.5 * oe.contract('bcij,bcij->bcij', derivatives[2], sigma_2)

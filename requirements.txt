@@ -10,8 +10,7 @@ matplotlib
 tqdm
 prettytable
 
-pykeops
-
+antares
 numba
 
 -e .

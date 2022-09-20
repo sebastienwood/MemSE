@@ -4,4 +4,5 @@
 *.egg-info/
 */__pycache__/
 *.pyc
-env/
+*env/
+collect_env.py

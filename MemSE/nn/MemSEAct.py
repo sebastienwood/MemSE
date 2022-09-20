@@ -11,22 +11,33 @@ class MemSEAct:
     __max_taylor__ = 1
     @classmethod
     def __call__(cls, module, data) -> Any:
+        # TODO work with any input shape
         mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
+        original_mu_shape = mu.shape
         degree_taylor = data['taylor_order']
         if gamma_shape is not None:
-            gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
+            gamma = torch.zeros(*gamma_shape, dtype=mu.dtype, device=mu.device)
             gamma_shape = None
 
-        gamma_view = gamma.reshape(gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
+        if len(gamma.shape) == 7: # TODO could simplify by flattening, all subcalls should be elementwise
+            gamma_square_view_shape = (gamma.shape[0], gamma.shape[1]*gamma.shape[2]*gamma.shape[3], -1)
+            einsum_expr = 'bcij,bklm,bcijklm->bcijklm'
+        elif len(gamma.shape) == 3:
+            gamma_square_view_shape = gamma.shape
+            einsum_expr = 'bi,bj,bij->bij'
+        else:
+            raise ValueError('Unsupported shape for activation inputs')
+
+        gamma_view = gamma.reshape(gamma_square_view_shape)
         sigma_2 = gamma_view.diagonal(dim1=1, dim2=2)
-        sigma_2 = sigma_2.view(*gamma.shape[:4])
+        sigma_2 = sigma_2.view(*mu.shape)
         assert sigma_2.numel() == mu.numel()
 
         #TODO update gamma, prepare derivatives, store and pass them around as needed
         d_mu = cls.derivatives(module, data, mu)
-        ga_r = oe.contract('bcij,bklm,bcijklm->bcijklm',d_mu[1],d_mu[1],gamma)
+        ga_r = oe.contract(einsum_expr,d_mu[1],d_mu[1],gamma)
         cls.gamma_extra_update(module, data, ga_r, d_mu)
-        ga_view = ga_r.reshape(ga_r.shape[0], ga_r.shape[1]*ga_r.shape[2]*ga_r.shape[3], -1)
+        ga_view = ga_r.reshape(gamma_square_view_shape)
 
         mu_p, gamma_p = cls.main(module, data, mu, sigma_2, d_mu)
         ga_r = diagonal_replace(ga_view, gamma_p.reshape(*ga_view.diagonal(dim1=1, dim2=2).shape)).view(*ga_r.shape)
