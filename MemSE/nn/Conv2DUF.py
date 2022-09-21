@@ -3,6 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+import opt_einsum as oe
 from numba import njit, prange
 from torchtyping import TensorType
 
@@ -76,6 +77,9 @@ class Conv2DUF(nn.Module):
         mu, gamma, gamma_shape = memse_dict['mu'], memse_dict['gamma'], memse_dict['gamma_shape']
         ct = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax  # Only one column at most (vector of weights)
         ct_sq = ct ** 2
+        if ct.dim() == 0:
+            ct = ct.repeat(conv2duf.original_weight.shape[0]).to(mu)
+            ct_sq = ct_sq.repeat(conv2duf.original_weight.shape[0]).to(mu)
 
         # TODO if compute power
         # dominated by memory accesses
@@ -83,12 +87,12 @@ class Conv2DUF(nn.Module):
         #  - fused kernel for mse_var (same same)
         if memse_dict['compute_power']:
             P_tot = conv2duf.energy(conv2duf,
-                                    mu,
-                                    gamma,
-                                    gamma_shape,
-                                    memse_dict['sigma'] / ct,
-                                    conv2duf.original_weight,
-                                    memse_dict['r'])
+                                    x=mu,
+                                    gamma=gamma,
+                                    gamma_shape=gamma_shape,
+                                    c=memse_dict['sigma'] / ct,
+                                    w=conv2duf.original_weight,
+                                    r=memse_dict['r'])
         else:
             P_tot = 0.
 
@@ -133,15 +137,15 @@ class Conv2DUF(nn.Module):
                c: TensorType["channel_out"],
                w: TensorType["channel_out", "channel_in", "width", "height"],
                r):
-        sum_x_gd: torch.TensorType = gamma_to_diag(gamma) + x ** 2
-        abs_w: torch.TensorType = torch.einsum('coij,c->coij', torch.abs(w), c)
-        e_p_mem: torch.TensorType = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, **conv2duf.conv_property_dict), dim=0, keepdim=True)
+        sum_x_gd: torch.TensorType = + x ** 2 + gamma_to_diag(gamma)
+        abs_w: torch.TensorType = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
+        e_p_mem: torch.TensorType = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, **conv2duf.conv_property_dict), dim=(1,2,3))
 
         Gpos = torch.clip(w, min=0)
         Gneg = torch.clip(-w, min=0)
         zp_mu, zp_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, c, Gpos)
         zm_mu, zm_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, c, Gneg)
 
-        e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) /  r, dim=0, keepdim=True)
-        e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) /  r, dim=0, keepdim=True)
+        e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) /  r, dim=(1,2,3))
+        e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) /  r, dim=(1,2,3))
         return e_p_mem + e_p_tiap + e_p_tiam
