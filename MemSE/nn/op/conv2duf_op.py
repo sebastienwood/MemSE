@@ -128,10 +128,12 @@ class Conv2DUF_op(Function):
 TEST = False
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
-    def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, mu: torch.Tensor, c, weight_shape, padding, stride):
+    def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, gamma_shape, mu: torch.Tensor, c, weight_shape, padding, stride):
+        gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1)
+        if gamma_shape is None:
+            gamma_permute += torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
         cuda.select_device(int(str(input.device).split(':')[1]))
         if TEST:
-            gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
             threadsperblock= (8, 128)
             grid_bi = input.shape[0] * input.shape[2] * input.shape[3] * input.shape[5] * input.shape[6]
             blockspergrid_x = min(math.ceil((weight_shape[1] + threadsperblock[0] - 1) / threadsperblock[0]), 1024)
@@ -143,10 +145,7 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
             blockspergrid_y = math.ceil(input.shape[2] / threadsperblock[1])
             blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
-
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-
-            gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1) + torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
             op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
         return input
 
@@ -159,7 +158,7 @@ def next_power_of_2(x):
     return 1<<(x-1).bit_length()
 
 
-def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1):
+def conv2duf_op(input, gamma, gamma_shape, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1):
     if isinstance(stride, int):
         stride = (stride, stride)
     if isinstance(dilation, int):
@@ -176,10 +175,14 @@ def conv2duf_op(input, gamma, mu, c, weight_shape, stride: Tuple[int]=(1,1), pad
     assert weight_shape[0] == input.shape[1]
 
     if input.device.type == "cpu":
+        # NOTE @sebastienwood "cpu" version is kept intact as a 100% sure version of the code
+        # it could be easily optimized using the latests ideas
+        # major drawback is DRAM usage: gamma is always initialized 
+        gamma = gamma if gamma_shape is None else torch.zeros(gamma_shape, device=mu.device, dtype=mu.dtype)
         Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, padding, stride)
         return input
     else:
-        input = Conv2DUF_op_CUDA.apply(input, gamma, mu, c.to(input), weight_shape, padding, stride)
+        input = Conv2DUF_op_CUDA.apply(input, gamma, gamma_shape, mu, c.to(input), weight_shape, padding, stride)
         return input
 
 

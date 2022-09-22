@@ -90,9 +90,10 @@ class Conv2DUF(nn.Module):
                                     x=mu,
                                     gamma=gamma,
                                     gamma_shape=gamma_shape,
-                                    c=memse_dict['sigma'] / ct,
+                                    c=ct,
                                     w=conv2duf.original_weight,
-                                    r=memse_dict['r'])
+                                    r=memse_dict['r'],
+                                    sigma=memse_dict['sigma'])
         else:
             P_tot = 0.
 
@@ -114,18 +115,14 @@ class Conv2DUF(nn.Module):
     @staticmethod
     def mse_var(conv2duf: Conv2DUF, input, gamma, gamma_shape, r, c0, weights):
         mu = conv2duf(input, weights) * r
-        gamma = gamma if gamma_shape is None else torch.zeros(gamma_shape, device=mu.device, dtype=mu.dtype)
 
         # TODO
         # gamma only diag kernels at the end
-        # if gamma shape is not None
-        #  in conv2duf_op, have a version without gamma (reduced memory accesses)
-        # gamma is 100% initialized after one conv2duf so return None for gamma_shape
         if gamma_shape is None:
             gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
         else:
             gamma_n = torch.zeros(mu.shape + mu.shape[1:], device=mu.device, dtype=mu.dtype)
-        gamma_n = conv2duf_op(gamma_n, gamma, input, c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
+        gamma_n = conv2duf_op(gamma_n, gamma, gamma_shape, input, c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
         gamma_n *= r ** 2
         return mu, gamma_n, None
 
@@ -136,15 +133,18 @@ class Conv2DUF(nn.Module):
                gamma_shape,
                c: TensorType["channel_out"],
                w: TensorType["channel_out", "channel_in", "width", "height"],
-               r):
-        sum_x_gd: torch.TensorType = + x ** 2 + gamma_to_diag(gamma)
+               r,
+               sigma):
+        sum_x_gd: torch.TensorType = x ** 2
+        if gamma_shape is None:
+            sum_x_gd += gamma_to_diag(gamma)
         abs_w: torch.TensorType = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
         e_p_mem: torch.TensorType = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, **conv2duf.conv_property_dict), dim=(1,2,3))
 
         Gpos = torch.clip(w, min=0)
         Gneg = torch.clip(-w, min=0)
-        zp_mu, zp_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, c, Gpos)
-        zm_mu, zm_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, c, Gneg)
+        zp_mu, zp_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, (sigma/c) ** 2, Gpos)
+        zm_mu, zm_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, (sigma/c) ** 2, Gneg)
 
         e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) /  r, dim=(1,2,3))
         e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) /  r, dim=(1,2,3))
