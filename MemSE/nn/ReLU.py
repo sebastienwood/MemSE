@@ -44,7 +44,7 @@ class ReLU_(MemSEAct):
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
         @torch.jit.script
-        def f(mu: torch.Tensor, sigma_2: torch.Tensor):
+        def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=SQRT_2):
             sigma = torch.sqrt(sigma_2)
 
             # séparer positifs et nuls
