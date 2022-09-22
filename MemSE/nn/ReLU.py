@@ -43,7 +43,7 @@ class ReLU_(MemSEAct):
     __type__ = 'ReLU'
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
-        @torch.jit
+        @torch.jit.script
         def f(mu: torch.Tensor, sigma_2: torch.Tensor):
             sigma = torch.sqrt(sigma_2)
 
