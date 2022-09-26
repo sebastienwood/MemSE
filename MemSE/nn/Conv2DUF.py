@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 import opt_einsum as oe
-from numba import njit, prange
 from torchtyping import TensorType
 
 from .op import conv2duf_op
@@ -35,6 +34,10 @@ class Conv2DUF(nn.Module):
     @property
     def original_weight(self):
         return self.weight.t().reshape(self.c.weight.shape)
+
+    @property
+    def channel_out(self):
+        return self.original_weight.shape[0]
 
     @property
     def kernel_size(self):

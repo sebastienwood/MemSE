@@ -103,35 +103,30 @@ def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Te
     return (mu_r + oe.contract('i,bi->b',torch.square(c), diags)) / r
 
 
-#@torch.jit.script
+@torch.jit.script
 def double_conv(tensor: torch.Tensor,
                 weight: torch.Tensor,
                 stride: List[int] = (1, 1),
                 padding: List[int] = (1, 1),
                 dilation: List[int] = (1, 1),
                 groups: int = 1,
-                dtype: torch.dtype = torch.float16,
-                memory_format: torch.memory_format = torch.channels_last):
+                ):
     '''A doubly convolution for tensor of shape [bijkijk]'''
-    if tensor.is_cuda:
-        assert torch.backends.cudnn.version() >= 7603, 'Optimization requires updated CudNN libraries >= v7.6'
-        weight = weight.to(dtype=dtype, memory_format=memory_format)
-        tensor = tensor.to(dtype=dtype)
-    else:
-        weight = weight.to(memory_format=memory_format)
+    weight = weight.to(dtype=torch.float16, memory_format=torch.channels_last)
+    tensor = tensor.to(dtype=torch.float16)
 
     # TODO not so sure it works for grouped convolutions
     bs = tensor.shape[0]
     img_shape = tensor.shape[1:4]
 
-    nice_view = tensor.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=memory_format)
+    nice_view = tensor.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=torch.channels_last)
     first_res = torch.nn.functional.conv2d(input=nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
     first_res_shape = first_res.shape
     nice_view_res = first_res.view(bs, img_shape[0], img_shape[1], img_shape[2], first_res_shape[1], first_res_shape[2], first_res_shape[3])
 
     permuted = nice_view_res.permute(0, 4, 5, 6, 1, 2, 3)
-    another_nice_view = permuted.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=memory_format)
+    another_nice_view = permuted.reshape(-1, img_shape[0], img_shape[1], img_shape[2]).contiguous(memory_format=torch.channels_last)
     second_res = torch.nn.functional.conv2d(input=another_nice_view, weight=weight, stride=stride, padding=padding, dilation=dilation, groups=groups)
 
     second_res_shape = second_res.shape
@@ -166,16 +161,16 @@ if __name__ == '__main__':
     import numpy as np
     device = torch.device('cuda:0')
     unscripted = double_conv
-    inp = torch.rand(32, 3, 32, 32, 3, 32, 32, device=device)
+    inp = torch.rand(16, 3, 32, 32, 3, 32, 32, device=device)
     w = torch.rand(3, 3, 3, 3, device=device)
-    for n, m in {'us': unscripted}.items(): # , 's': torch.jit.script(double_conv)
-        for dt in [torch.float16, torch.float32]:
-            for memf in [torch.channels_last, torch.contiguous_format]:
-                timings = []
-                for _ in range(100):
-                    start = time()
-                    m(inp, w, dtype=dt, memory_format=memf)
-                    timings.append(time() - start)
-                        
-                median_time = np.median(timings)
-                print(f'Median time is {median_time} ({n} {memf} {dt})')
+    for n, m in {'us': unscripted, 's': torch.jit.script(double_conv)}.items(): # 
+        #for dt in [torch.float16, torch.float32]:
+            #for memf in [torch.channels_last, torch.contiguous_format]:
+        timings = []
+        for _ in range(100):
+            start = time()
+            m(inp, w)
+            timings.append(time() - start)
+                
+        median_time = np.median(timings)
+        print(f'Median time is {median_time} ({n})')

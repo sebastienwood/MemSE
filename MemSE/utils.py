@@ -39,6 +39,9 @@ def n_vars_computation(model: nn.Module) -> int:
     if isinstance(module, nn.Linear):
       n_vars_column += module.out_features#[0]
       n_vars_layer += 1
+    elif isinstance(module, Conv2DUF):
+      n_vars_columns += module.channel_out
+      n_vars_layer += 1
   return n_vars_column, n_vars_layer
 
 def memory_debug(cuda_profile:bool=True):

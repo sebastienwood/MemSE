@@ -10,6 +10,7 @@ matplotlib
 tqdm
 prettytable
 
+ninja
 antares
 numba
 
