@@ -42,7 +42,7 @@ def n_vars_computation(model: nn.Module) -> int:
       n_vars_column += module.out_features#[0]
       n_vars_layer += 1
     elif isinstance(module, Conv2DUF):
-      n_vars_columns += module.channel_out
+      n_vars_column += module.channel_out
       n_vars_layer += 1
     elif isinstance(module, nn.Conv2d):
       warnings.warn('A Conv2D has not been cast to memristor, continuing')
