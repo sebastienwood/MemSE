@@ -38,11 +38,8 @@ def net_param_iterator(model: nn.Module) -> Iterator:
 def n_vars_computation(model: nn.Module) -> int:
   n_vars_column, n_vars_layer = 0, 0
   for _, module in model.named_modules():
-    if isinstance(module, nn.Linear):
+    if isinstance(module, nn.Linear) or isinstance(module, Conv2DUF):
       n_vars_column += module.out_features#[0]
-      n_vars_layer += 1
-    elif isinstance(module, Conv2DUF):
-      n_vars_column += module.channel_out
       n_vars_layer += 1
   return n_vars_column, n_vars_layer
 

@@ -36,7 +36,7 @@ class Conv2DUF(nn.Module):
         return self.weight.reshape(self.c.weight.shape)
 
     @property
-    def channel_out(self):
+    def out_features(self):
         return self.original_weight.shape[0]
 
     @property
