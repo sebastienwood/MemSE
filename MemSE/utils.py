@@ -1,3 +1,4 @@
+import warnings
 from MemSE.definitions import SUPPORTED_OPS, UNSUPPORTED_OPS
 import torch
 import torch.nn as nn
@@ -30,6 +31,7 @@ def net_param_iterator(model: nn.Module) -> Iterator:
     elif type(module) in UNSUPPORTED_OPS:
       raise ValueError(f'The network is using an unsupported operation {type(module)}')
     else:
+      warnings.warn(f'The network is using an operation that is not supported or unsupported, ignoring it ({type(module)})')
       ignored.append(type(module))
   #print(set(ignored))
 
@@ -42,6 +44,8 @@ def n_vars_computation(model: nn.Module) -> int:
     elif isinstance(module, Conv2DUF):
       n_vars_columns += module.channel_out
       n_vars_layer += 1
+    elif isinstance(module, nn.Conv2d):
+      warnings.warn('A Conv2D has not been cast to memristor, continuing')
   return n_vars_column, n_vars_layer
 
 def memory_debug(cuda_profile:bool=True):

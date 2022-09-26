@@ -16,7 +16,7 @@ class Conv2DUF(nn.Module):
         self.c = conv
         self.output_shape = output_shape
 
-        self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1).t()))
+        self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1)))
         if conv.bias is not None:
             self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
         else:
@@ -33,7 +33,7 @@ class Conv2DUF(nn.Module):
 
     @property
     def original_weight(self):
-        return self.weight.t().reshape(self.c.weight.shape)
+        return self.weight.reshape(self.c.weight.shape)
 
     @property
     def channel_out(self):

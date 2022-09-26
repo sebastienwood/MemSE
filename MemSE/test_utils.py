@@ -5,6 +5,7 @@ import numpy as np
 
 from MemSE import MemristorQuant, MemSE
 from MemSE.dataset import get_dataloader
+from MemSE.definitions import WMAX_MODE
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU
 from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
 
@@ -49,7 +50,7 @@ def get_net_transformed(net, method, inp: torch.Tensor=INP):
 SIGMA = np.logspace(-1, -3, 3).tolist()
 
 
-def nn2memse(nn, sigma: float=SIGMA[0]):
-    quanter = MemristorQuant(nn, std_noise=sigma, Gmax = 3.268, N=128)
+def nn2memse(nn, sigma: float=SIGMA[0], mode=WMAX_MODE.ALL):
+    quanter = MemristorQuant(nn, std_noise=sigma, Gmax = 3.268, N=128, wmax_mode=mode)
     memse = MemSE(nn, quanter, input_bias=False)
     return memse
