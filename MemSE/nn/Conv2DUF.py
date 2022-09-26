@@ -13,7 +13,7 @@ class Conv2DUF(nn.Module):
     def __init__(self, conv, input_shape, output_shape):
         super().__init__()
         assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
-        self.c = conv
+        self.c = [conv]
         self.output_shape = output_shape
 
         self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1)))
@@ -33,7 +33,7 @@ class Conv2DUF(nn.Module):
 
     @property
     def original_weight(self):
-        return self.weight.reshape(self.c.weight.shape)
+        return self.weight.reshape(self.c[0].weight.shape)
 
     @property
     def out_features(self):
@@ -41,23 +41,23 @@ class Conv2DUF(nn.Module):
 
     @property
     def kernel_size(self):
-        return self.c.kernel_size
+        return self.c[0].kernel_size
 
     @property
     def padding(self):
-        return self.c.padding
+        return self.c[0].padding
 
     @property
     def dilation(self):
-        return self.c.dilation
+        return self.c[0].dilation
 
     @property
     def groups(self):
-        return 'adaptive' if self.c.groups == 'adaptive' else int(self.c.groups)
+        return 'adaptive' if self.c[0].groups == 'adaptive' else int(self.c[0].groups)
 
     @property
     def stride(self):
-        return self.c.stride
+        return self.c[0].stride
 
     @property
     def out_features(self):
@@ -73,7 +73,7 @@ class Conv2DUF(nn.Module):
         }
 
     def unfold_input(self, x):
-        return nn.functional.unfold(x, self.c.kernel_size, self.c.dilation, self.c.padding, self.c.stride)
+        return nn.functional.unfold(x, self.c[0].kernel_size, self.c[0].dilation, self.c[0].padding, self.c[0].stride)
 
     @staticmethod
     def memse(conv2duf: Conv2DUF, memse_dict):
