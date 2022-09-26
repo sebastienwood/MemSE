@@ -44,8 +44,6 @@ def n_vars_computation(model: nn.Module) -> int:
     elif isinstance(module, Conv2DUF):
       n_vars_column += module.channel_out
       n_vars_layer += 1
-    elif isinstance(module, nn.Conv2d):
-      warnings.warn('A Conv2D has not been cast to memristor, continuing')
   return n_vars_column, n_vars_layer
 
 def memory_debug(cuda_profile:bool=True):
