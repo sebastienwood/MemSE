@@ -60,7 +60,7 @@ class Conv2DUF(nn.Module):
         return self.c[0].stride
 
     @property
-    def out_features(self):
+    def out_features_numel(self):
         return self.output_shape.numel()
 
     @property
