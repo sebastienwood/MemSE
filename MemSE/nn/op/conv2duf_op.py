@@ -190,9 +190,12 @@ if __name__ == '__main__':
     from time import time
     import numpy as np
     wh = 32
-    who = wh - 2
     ch = 3
     bs = 16
+    padding = 0
+    stride = 1
+    kernel = 3
+    who = (wh - kernel + 2 * padding) / stride + 1
 
     input = torch.rand(bs, ch, who, who, ch, who, who)
     gamma = torch.rand(bs, ch, wh, wh, ch, wh, wh)

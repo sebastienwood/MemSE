@@ -31,7 +31,7 @@ def net_param_iterator(model: nn.Module) -> Iterator:
     elif type(module) in UNSUPPORTED_OPS:
       raise ValueError(f'The network is using an unsupported operation {type(module)}')
     else:
-      warnings.warn(f'The network is using an operation that is not supported or unsupported, ignoring it ({type(module)})')
+      #warnings.warn(f'The network is using an operation that is not supported or unsupported, ignoring it ({type(module)})')
       ignored.append(type(module))
   #print(set(ignored))
 

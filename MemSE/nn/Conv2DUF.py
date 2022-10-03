@@ -125,8 +125,7 @@ class Conv2DUF(nn.Module):
             gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
         else:
             gamma_n = torch.zeros(mu.shape + mu.shape[1:], device=mu.device, dtype=mu.dtype)
-        gamma_n = conv2duf_op(gamma_n, gamma, gamma_shape, input, c0, weight_shape=weights.shape, **conv2duf.conv_property_dict)
-        gamma_n *= r ** 2
+        gamma_n = conv2duf_op(gamma_n, gamma, gamma_shape, input, c0, weight_shape=weights.shape, **conv2duf.conv_property_dict) * r ** 2
         return mu, gamma_n, None
 
     @staticmethod
