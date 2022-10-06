@@ -42,10 +42,21 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 
 
 #@torch.jit.script # see https://github.com/pytorch/pytorch/issues/49372
-def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax, Wmax, sigma:float, r:float, gamma_shape:Optional[List[int]]=None, compute_power:bool = True):
+def linear_layer_logic(W:torch.Tensor,
+					   mu:torch.Tensor,
+					   gamma:torch.Tensor,
+					   Gmax,
+					   Wmax,
+					   sigma:float,
+					   r:float,
+					   gamma_shape:Optional[List[int]]=None,
+					   compute_power:bool = True):
 	batch_len = mu.shape[0]
 	image_shape = mu.shape[1:]
 
+	###
+	# Should not be managed here
+	###
 	if hasattr(W, '__padding'):
 		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape, padding=W.__padding)
 	else:
@@ -54,6 +65,13 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 			gamma_shape = [batch_len,mu.shape[1],mu.shape[1]]
 		else:
 			gamma = torch.reshape(gamma,(batch_len,mu.shape[1],mu.shape[1]))
+
+	if hasattr(W, '__bias'):
+		mu = torch.nn.functional.pad(mu, (0, 1), value=1.)
+		gamma = torch.nn.functional.pad(gamma, (0, 1, 0, 1))
+	###
+	#
+	###
 
 	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax.to(mu.device)/Wmax.to(mu.device) # TODO automated test for columnwise validity
 	sigma_p = sigma / ct
@@ -83,7 +101,7 @@ def linear_layer_logic(W:torch.Tensor, mu:torch.Tensor, gamma:torch.Tensor, Gmax
 
 def linear(module, data):
 	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
-													    data['mu'],
+														data['mu'],
 														data['gamma'],
 														module.weight.learnt_Gmax,
 														module.weight.Wmax,

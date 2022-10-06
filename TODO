@@ -5,3 +5,5 @@
 [] MSE_forward for conv_to_fc layer @sebastienwood
 [] ffcv for dataloaders @sebastienwood
 [] energy eq @sebastienwood
+[] rework ops dispatch -> include noops such as view/pad automatically / give linear its own class to stop messing with __
+[] rework linear converter -> fuse bias
