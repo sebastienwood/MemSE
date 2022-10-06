@@ -7,7 +7,7 @@ import opt_einsum as oe
 from torchtyping import TensorType
 
 from .op import conv2duf_op
-from .utils import double_conv, energy_vec_batched, gamma_add_diag, gamma_to_diag, padded_mu_gamma
+from .utils import double_conv, gamma_to_diag
 
 class Conv2DUF(nn.Module):
     def __init__(self, conv, input_shape, output_shape):
@@ -17,10 +17,7 @@ class Conv2DUF(nn.Module):
         self.output_shape = output_shape
 
         self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1)))
-        if conv.bias is not None:
-            self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
-        else:
-            self.bias = None
+        assert conv.bias is None
 
     def forward(self, x, weight=None):
         # inp_unf = self.unfold_input(x)
@@ -29,7 +26,7 @@ class Conv2DUF(nn.Module):
         # if self.bias is not None:
         # 	out += self.bias[:, None, None]
         # return out
-        return torch.nn.functional.conv2d(x, self.original_weight if weight is None else weight, bias=self.bias, **self.conv_property_dict)
+        return torch.nn.functional.conv2d(x, self.original_weight if weight is None else weight, **self.conv_property_dict)
 
     @property
     def original_weight(self):

@@ -1,4 +1,5 @@
 import copy
+from typing import Callable
 import torch
 import torch.nn as nn
 from MemSE.nn import Conv2DUF
@@ -92,21 +93,22 @@ def build_sequential_linear(conv):
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
     conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding, conv.stride)
-    linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=False)
-    linear.weight.data = conv_fced
+    linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0] + 1, bias=False)
+    if conv.bias is not None:
+        biases = conv.bias.repeat_interleave((conv_fced.shape[0]//conv.bias.shape[0])).unsqueeze(1)
+    linear.weight.data = torch.cat((conv_fced, biases), dim=1) if conv.bias is not None else conv_fced
     linear.weight.__padding = conv.padding
     linear.weight.__stride = conv.stride
     linear.weight.__output_shape = current_output_shape
-    linear.register_parameter('__bias', conv.bias)
     seq = nn.Sequential(
         LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),
         nn.Flatten(),
+        LambdaLayer(lambda x: nn.functional.pad(x, (0, 1), value=1.)),
         linear,
         LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:])),
-        LambdaLayer(lambda x: torch.add(x, linear.__bias[:, None, None]) if conv.bias is not None else x)
     )
     rand_y_repl = seq(rand_x)
-    assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), 'Linear did not cast to a satisfying solution'
+    assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), f'Linear did not cast to a satisfying solution ({torch.mean((rand_y - rand_y_repl)**2)})'
     return seq
 
 @torch.no_grad()
@@ -125,7 +127,7 @@ def recursive_setattr(obj, name, new):
         return recursive_setattr(getattr(obj, splitted[0]), splitted[1], new)
 
 
-def replace_op(model, fx, old_module=torch.nn.Conv2d):
+def replace_op(model: nn.Module, fx: Callable, old_module=nn.Conv2d):
     new_modules = {}
     if not isinstance(old_module, list):
         old_module = [old_module]
@@ -278,3 +280,16 @@ def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
     if modules_to_fuse is not None:
         return torch.quantization.fuse_modules(model, modules_to_fuse)
     return model
+
+
+def fuse_conv_bias(model: nn.Module):
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            if module.bias is None:
+                continue
+            old_weight = module.weight
+            bias = module.bias[:, None, None].unsqueeze(0)
+            print(bias.shape)
+            print(old_weight.shape)
+            module.bias = None
+            module.weight = torch.cat((old_weight, bias), 1)
