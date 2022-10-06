@@ -7,3 +7,4 @@
 [] energy eq @sebastienwood
 [] rework ops dispatch -> include noops such as view/pad automatically / give linear its own class to stop messing with __
 [] rework linear converter -> fuse bias
+[] dataset.py memscale in a nice way
