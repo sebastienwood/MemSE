@@ -88,6 +88,7 @@ class LambdaLayer(nn.Module):
 
 @torch.no_grad()
 def build_sequential_linear(conv):
+    # TODO remove bias management (distinct function)
     current_input_shape = conv.__input_shape
     current_output_shape = conv.__output_shape
     rand_x = torch.rand(current_input_shape)
@@ -98,6 +99,7 @@ def build_sequential_linear(conv):
         biases = conv.bias.repeat_interleave((conv_fced.shape[0]//conv.bias.shape[0])).unsqueeze(1)
     linear.weight.data = torch.cat((conv_fced, biases), dim=1) if conv.bias is not None else conv_fced
     linear.weight.__padding = conv.padding
+    linear.weight.__bias = conv.bias is not None
     linear.weight.__stride = conv.stride
     linear.weight.__output_shape = current_output_shape
     seq = nn.Sequential(
@@ -180,10 +182,11 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     y = record_shapes(model, x)
 
     model = replace_op(model, op)
+    model = replace_op(model, fuse_linear_bias)
     if verbose:
-        print("==> converted Conv2d to Linear")
+        print(f"==> converted Conv2d to {impl}")
         print(model)
-    assert torch.allclose(y, model(x), atol=1e-5), 'Linear transformation did not go well'
+    assert torch.allclose(y, model(x), atol=1e-5), f'{impl} transformation did not go well'
     model.train()
     model.__memed = True
     return model
@@ -282,14 +285,14 @@ def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
     return model
 
 
-def fuse_conv_bias(model: nn.Module):
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Conv2d):
-            if module.bias is None:
-                continue
-            old_weight = module.weight
-            bias = module.bias[:, None, None].unsqueeze(0)
-            print(bias.shape)
-            print(old_weight.shape)
-            module.bias = None
-            module.weight = torch.cat((old_weight, bias), 1)
+def fuse_linear_bias(linear: nn.Linear):
+    if linear.bias is None:
+        return linear
+    fused_linear = nn.Linear(linear.weight.shape[1], linear.weight.shape[0] + 1, bias=False)
+    biases = linear.bias.repeat_interleave((linear.weight.shape[0]//linear.bias.shape[0])).unsqueeze(1)
+    fused_linear.weight.data = torch.cat((linear.weight, biases), dim=1)
+    seq = nn.Sequential(
+        LambdaLayer(lambda x: nn.functional.pad(x, (0, 1), value=1.)),
+        fused_linear,
+    )
+    return seq
