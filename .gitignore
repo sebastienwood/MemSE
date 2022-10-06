@@ -6,3 +6,4 @@
 *.pyc
 *env/
 collect_env.py
+.vscode/
