@@ -56,3 +56,6 @@ def count_parameters(model):
 
 def memory_usage(tensor):
   return tensor.numel() * tensor.element_size()
+
+def default(val, dval):
+  return val if val is not None else dval
