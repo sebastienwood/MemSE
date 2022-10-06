@@ -30,17 +30,37 @@ transform_test = transforms.Compose([
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
 ])
 
+
+transform_train_memscale = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0,0,0), (2, 2, 2)),
+])
+
+transform_test_memscale = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0,0,0), (2, 2, 2)),
+])
+
+
 def get_dataset(name:str):
     name = ALIASES[str.lower(name)]
     dataset = getattr(datasets, name)
     num_classes = NUM_CLASSES[name]
     return dataset, num_classes, (3, 32, 32)
 
-def get_dataloader(name:str, root='./data', bs=128, workers=2):
+def get_dataloader(name:str, root='./data', bs=128, workers=2, memscale = False):
     dset, nclasses, input_shape = get_dataset(name)
-    train_set = dset(root=root, train=True, download=True, transform=transform_train)
-    train_set_clean = dset(root=root, train=True, download=True, transform=transform_test)
-    test_set = dset(root=root, train=False, download=True, transform=transform_test)
+    if memscale == True:
+        train_set = dset(root=root, train=True, download=True, transform=transform_train_memscale)
+        train_set_clean = dset(root=root, train=True, download=True, transform=transform_test_memscale)
+        test_set = dset(root=root, train=False, download=True, transform=transform_test_memscale)
+    else:
+        train_set = dset(root=root, train=True, download=True, transform=transform_train)
+        train_set_clean = dset(root=root, train=True, download=True, transform=transform_test)
+        test_set = dset(root=root, train=False, download=True, transform=transform_test)
+
 
     train_loader = data.DataLoader(train_set, batch_size=bs, shuffle=True, num_workers=workers, pin_memory=True)
     train_clean_loader = data.DataLoader(train_set_clean, batch_size=bs, shuffle=False, num_workers=workers, pin_memory=True)
