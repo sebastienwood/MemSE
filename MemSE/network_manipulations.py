@@ -24,7 +24,11 @@ MODELS_FUSION = {
                   *resnet_layer_fusion_generator(3, True),
                   *resnet_layer_fusion_generator(4, True)
                 ],
-    'smallest_vgg': None
+    'smallest_vgg': None,
+    'make_johnet' : [['features.0', 'features.1'],['features.3', 'features.4'],['features.8', 'features.9'],
+                ['features.11', 'features.12'],['features.16', 'features.17'],['features.19', 'features.20'],
+                ['features.22', 'features.23'],['features.27', 'features.28'],['features.30', 'features.31'],
+                ['features.33', 'features.34'],['features.38', 'features.39'],['features.41', 'features.42'],['features.44', 'features.45']]
 }
 
 
