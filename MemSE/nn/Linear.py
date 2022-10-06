@@ -68,7 +68,10 @@ def linear_layer_logic(W:torch.Tensor,
 
 	if hasattr(W, '__bias'):
 		mu = torch.nn.functional.pad(mu, (0, 1), value=1.)
-		gamma = torch.nn.functional.pad(gamma, (0, 1, 0, 1))
+		if gamma_shape is not None:
+			gamma_shape = [batch_len,mu.shape[1]+1,mu.shape[1]+1]
+		else:
+			gamma = torch.nn.functional.pad(gamma, (0, 1, 0, 1))
 	###
 	#
 	###
