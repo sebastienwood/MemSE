@@ -1,4 +1,5 @@
 import copy
+from turtle import forward
 from typing import Callable, Iterator
 import torch
 import torch.nn as nn
@@ -91,6 +92,15 @@ class LambdaLayer(nn.Module):
         self.lambd = lambd
     def forward(self, x):
         return self.lambd(x)
+    
+
+class InspectorLayer(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def forward(self, x):
+        print(x.shape)
+        return x
 
 
 @torch.no_grad()
@@ -104,10 +114,12 @@ def build_sequential_linear(conv):
     linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=conv.bias is not None)
     linear.weight.data = conv_fced
     if conv.bias is not None:
-        linear.bias.data = conv.bias
+        linear.bias.data = conv.bias.repeat_interleave((linear.weight.shape[0]//conv.bias.shape[0]))
     seq = nn.Sequential(
         Padder((conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0])),
+        InspectorLayer(),
         Flattener(),
+        InspectorLayer(),
         linear,
         Reshaper(current_output_shape[1:]),
     )
@@ -165,7 +177,7 @@ CONVERT = {
 
 
 @torch.no_grad()
-def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
+def conv_to_memristor(model, input_shape, verbose=True, impl='linear'):
     assert impl in ['linear', 'unfolded']
     assert not hasattr(model, '__memed'), 'This model has already been used in `conv_to_memristor`'
     op = CONVERT.get(impl, 'unfolded')
@@ -184,6 +196,7 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     y = record_shapes(model, x)
 
     model = replace_op(model, op)
+    assert torch.allclose(y, model(x), atol=1e-5), f'{impl} transformation did not go well'
     model = replace_op(model, fuse_linear_bias, old_module=nn.Linear)
     if verbose:
         print(f"==> converted Conv2d to {impl}")

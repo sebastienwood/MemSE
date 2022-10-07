@@ -31,7 +31,7 @@ MODELS = {
     'vgg_relu': smallest_vgg_ReLU(),
     'vgg_features': smallest_vgg_ReLU(features_only=True),
     'resnet': fuse_conv_bn(resnet18().eval(), 'resnet18'),
-    'johnet': make_JohNet(),
+    'johnet': fuse_conv_bn(make_JohNet().eval(), 'make_johnet'),
 }
 
 METHODS = {
