@@ -10,8 +10,8 @@ from prettytable import PrettyTable
 from MemSE.MemristorQuant import MemristorQuant
 from MemSE.network_manipulations import get_intermediates, store_add_intermediates_mse, store_add_intermediates_var
 from MemSE.nn.utils import zero_diag
-from MemSE.utils import net_param_iterator
-from MemSE.nn import mse_gamma, zero_but_diag_, Conv2DUF
+from MemSE.network_manipulations import net_param_iterator
+from MemSE.nn import mse_gamma, zero_but_diag_
 from MemSE.definitions import SUPPORTED_OPS
 
 def NOOP(*args, **kwargs):

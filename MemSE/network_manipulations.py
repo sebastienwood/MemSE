@@ -1,10 +1,12 @@
 import copy
-from typing import Callable
+from typing import Callable, Iterator
 import torch
 import torch.nn as nn
-from MemSE.nn import Conv2DUF
+from MemSE.definitions import SUPPORTED_OPS, UNSUPPORTED_OPS
+from MemSE.nn import Conv2DUF, Padder, Reshaper, Flattener
 from MemSE.utils import count_parameters
 from MemSE.conv_decompositions import tucker_decomposition_conv_layer
+
 
 def resnet_layer_fusion_generator(layer_idx, downsample: bool):
     lys = []
@@ -15,6 +17,7 @@ def resnet_layer_fusion_generator(layer_idx, downsample: bool):
         if downsample and i == 0:
             lys.append([f'{b}{i}.downsample.0', f'{b}{i}.downsample.1'])
     return lys
+
 
 MODELS_FUSION = {
     'resnet18': [
@@ -98,20 +101,15 @@ def build_sequential_linear(conv):
     rand_x = torch.rand(current_input_shape)
     rand_y = conv(rand_x)
     conv_fced = convmatrix2d(conv.weight, current_input_shape[1:], conv.padding, conv.stride)
-    linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0] + 1, bias=False)
+    linear = nn.Linear(conv_fced.shape[1], conv_fced.shape[0], bias=conv.bias is not None)
+    linear.weight.data = conv_fced
     if conv.bias is not None:
-        biases = conv.bias.repeat_interleave((conv_fced.shape[0]//conv.bias.shape[0])).unsqueeze(1)
-    linear.weight.data = torch.cat((conv_fced, biases), dim=1) if conv.bias is not None else conv_fced
-    linear.weight.__padding = conv.padding
-    linear.weight.__bias = conv.bias is not None
-    linear.weight.__stride = conv.stride
-    linear.weight.__output_shape = current_output_shape
+        linear.bias.data = conv.bias
     seq = nn.Sequential(
-        LambdaLayer(lambda x: nn.functional.pad(x, (conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0]))),
-        nn.Flatten(),
-        LambdaLayer(lambda x: nn.functional.pad(x, (0, 1), value=1.)),
+        Padder((conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0])),
+        Flattener(),
         linear,
-        LambdaLayer(lambda x: torch.reshape(x, (-1,) + current_output_shape[1:])),
+        Reshaper(current_output_shape[1:]),
     )
     rand_y_repl = seq(rand_x)
     assert torch.allclose(rand_y, rand_y_repl, atol=1e-5), f'Linear did not cast to a satisfying solution ({torch.mean((rand_y - rand_y_repl)**2)})'
@@ -133,7 +131,7 @@ def recursive_setattr(obj, name, new):
         return recursive_setattr(getattr(obj, splitted[0]), splitted[1], new)
 
 
-def replace_op(model: nn.Module, fx: Callable, old_module=nn.Conv2d):
+def replace_op(model: nn.Module, fx: Callable, old_module: nn.Module = nn.Conv2d):
     new_modules = {}
     if not isinstance(old_module, list):
         old_module = [old_module]
@@ -186,7 +184,7 @@ def conv_to_memristor(model, input_shape, verbose=False, impl='linear'):
     y = record_shapes(model, x)
 
     model = replace_op(model, op)
-    model = replace_op(model, fuse_linear_bias)
+    model = replace_op(model, fuse_linear_bias, old_module=nn.Linear)
     if verbose:
         print(f"==> converted Conv2d to {impl}")
         print(model)
@@ -296,7 +294,20 @@ def fuse_linear_bias(linear: nn.Linear):
     biases = linear.bias.repeat_interleave((linear.weight.shape[0]//linear.bias.shape[0])).unsqueeze(1)
     fused_linear.weight.data = torch.cat((linear.weight, biases), dim=1)
     seq = nn.Sequential(
-        LambdaLayer(lambda x: nn.functional.pad(x, (0, 1), value=1.)),
+        Padder((0, 1), value=1., gamma_value=0.),
         fused_linear,
     )
     return seq
+
+
+def net_param_iterator(model: nn.Module) -> Iterator:
+    ignored = []
+    for _, module in model.named_modules():
+        if type(module) in SUPPORTED_OPS.keys():
+            yield module
+        elif type(module) in UNSUPPORTED_OPS:
+            raise ValueError(f'The network is using an unsupported operation {type(module)}')
+        else:
+            #warnings.warn(f'The network is using an operation that is not supported or unsupported, ignoring it ({type(module)})')
+            ignored.append(type(module))
+    #print(set(ignored))

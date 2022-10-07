@@ -5,3 +5,5 @@ from .Softplus import Softplus
 from .ReLU import ReLU
 from .op import conv2duf_op
 from .utils import *
+from .Padder import Padder
+from .Reshaper import Reshaper, Flattener

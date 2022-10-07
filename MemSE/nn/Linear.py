@@ -51,30 +51,6 @@ def linear_layer_logic(W:torch.Tensor,
 					   r:float,
 					   gamma_shape:Optional[List[int]]=None,
 					   compute_power:bool = True):
-	batch_len = mu.shape[0]
-	image_shape = mu.shape[1:]
-
-	###
-	# Should not be managed here
-	###
-	if hasattr(W, '__padding'):
-		mu, gamma, gamma_shape = padded_mu_gamma(mu, gamma, gamma_shape=gamma_shape, padding=W.__padding)
-	else:
-		mu = torch.reshape(mu, (batch_len, image_shape.numel()))
-		if gamma_shape is not None: # gamma == 0 store only size
-			gamma_shape = [batch_len,mu.shape[1],mu.shape[1]]
-		else:
-			gamma = torch.reshape(gamma,(batch_len,mu.shape[1],mu.shape[1]))
-
-	if hasattr(W, '__bias'):
-		mu = torch.nn.functional.pad(mu, (0, 1), value=1.)
-		if gamma_shape is not None:
-			gamma_shape = [batch_len,mu.shape[1]+1,mu.shape[1]+1]
-		else:
-			gamma = torch.nn.functional.pad(gamma, (0, 1, 0, 1))
-	###
-	#
-	###
 
 	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax.to(mu.device)/Wmax.to(mu.device) # TODO automated test for columnwise validity
 	sigma_p = sigma / ct
@@ -92,13 +68,6 @@ def linear_layer_logic(W:torch.Tensor,
 		P_tot = 0.
 
 	mu, gamma, gamma_shape = linear_layer_vec_batched(mu, gamma, W, sigma_c, r, gamma_shape=gamma_shape)
-
-	if hasattr(W, '__padding'):
-		mu = torch.reshape(mu, (batch_len,) + W.__output_shape[1:])
-		if gamma_shape is not None:
-			gamma_shape = [batch_len,*mu.shape[1:],*mu.shape[1:]]
-		else:
-			gamma = torch.reshape(gamma, (batch_len,*mu.shape[1:],*mu.shape[1:]))
 	return mu, gamma, P_tot, gamma_shape
 
 

@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 from MemSE.nn import mse_gamma
-from MemSE.network_manipulations import conv_to_fc, fuse_conv_bias
+from MemSE.network_manipulations import conv_to_fc
 
-DEBUG = True
+DEBUG = False
 torch.manual_seed(0)
 #inp = torch.rand(BATCH_SIZE,3,32,32)
 
@@ -28,7 +28,7 @@ def test_memristor_manips(method, device, net, sigma):
     assert not torch.any(torch.isnan(m))
     assert not torch.any(torch.isnan(g))
     mse_th = mse_gamma(o, m, g)
-    mse_sim = memse.mse_sim(inp, o, reps=1e3)
+    mse_sim = memse.mse_sim(inp.to(device), o, reps=1e3)
     assert torch.allclose(mse_th.to(mse_sim), mse_sim, rtol=0.05)  # TODO method/net wise rtol/atol
 
     if DEBUG:
@@ -46,13 +46,3 @@ def test_memristor_manips(method, device, net, sigma):
         print(mse_sim.mean())
         print('MSE', ((mse_th - mse_sim) ** 2).mean())
         assert False # enforce output to stdout
-
-
-def test_fuse_conv_bias():
-    conv = nn.Conv2d(3, 3, kernel_size=3)
-    inp = torch.rand(2, 3, 32, 32)
-    ref = conv(inp)
-    ul = conv_to_fc(conv, inp.shape)
-    ones = torch.ones(1, 3, 1, 1)
-    test = ul(inp)
-    assert torch.allclose(ref, test, atol=1e-5), torch.mean((ref - test)**2)
