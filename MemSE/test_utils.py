@@ -7,6 +7,7 @@ from MemSE import MemristorQuant, MemSE
 from MemSE.dataset import get_dataloader
 from MemSE.definitions import WMAX_MODE
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU
+from MemSE.models.JohNet import make_JohNet
 from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
 
 DEVICES = ['cpu']
@@ -30,6 +31,7 @@ MODELS = {
     'vgg_relu': smallest_vgg_ReLU(),
     'vgg_features': smallest_vgg_ReLU(features_only=True),
     'resnet': fuse_conv_bn(resnet18().eval(), 'resnet18'),
+    'johnet': make_JohNet(),
 }
 
 METHODS = {

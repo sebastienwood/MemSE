@@ -24,7 +24,7 @@ def test_memristor_manips(method, device, net, sigma):
     conv2duf, o = get_net_transformed(net, method, inp)
     conv2duf, o = conv2duf.to(device), o.to(device)
     memse = nn2memse(conv2duf, sigma)
-    m, g, _ = memse.no_power_forward(inp.to(device))
+    m, g, p = memse.forward(inp.to(device))
     assert not torch.any(torch.isnan(m))
     assert not torch.any(torch.isnan(g))
     mse_th = mse_gamma(o, m, g)
