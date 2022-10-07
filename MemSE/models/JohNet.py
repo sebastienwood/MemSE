@@ -1,6 +1,7 @@
 from typing import Callable
 import torch.nn as nn
 import math
+from MemSE.nn import Flattener
 
 __all__ = ['make_JohNet']
 
@@ -8,6 +9,7 @@ class JohNet(nn.Module):
     def __init__(self, features, num_classes=1000, classifier_size: int = 16):
         super(JohNet, self).__init__()
         self.features = features
+        self.flattener = Flattener()
         self.classifier = nn.Linear(classifier_size, classifier_size, bias=False)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(0.1)
@@ -16,7 +18,7 @@ class JohNet(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = x.view(x.size(0), -1)
+        x = self.flattener(x)
         x = self.classifier(x)
         x = self.relu(x)
         x = self.dropout(x)
@@ -73,3 +75,6 @@ def make_JohNet(**kwargs):
     return model
 
 
+if __name__ == '__main__':
+    net = make_JohNet()
+    print(net)

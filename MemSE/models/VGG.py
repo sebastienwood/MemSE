@@ -1,6 +1,7 @@
 from typing import Callable
 import torch.nn as nn
 import math
+from MemSE.nn import Flattener
 
 __all__ = ['small_vgg', 'really_small_vgg', 'smallest_vgg','small_vgg_ReLU', 'really_small_vgg_ReLU', 'smallest_vgg_ReLU']
 
@@ -8,12 +9,13 @@ class VGG(nn.Module):
     def __init__(self, features, num_classes=1000, classifier_size: int = 16):
         super(VGG, self).__init__()
         self.features = features
+        self.flattener = Flattener()
         self.classifier = nn.Linear(classifier_size, num_classes, bias=False)
         self._initialize_weights()
 
     def forward(self, x):
         x = self.features(x)
-        x = x.view(x.size(0), -1)
+        x = self.flattener(x)
         x = self.classifier(x)
         return x
 
