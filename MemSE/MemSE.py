@@ -1,18 +1,21 @@
 import math
+
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 from prettytable import PrettyTable
+from tqdm import tqdm
 
-from MemSE.MemristorQuant import MemristorQuant
-from MemSE.network_manipulations import get_intermediates, store_add_intermediates_mse, store_add_intermediates_var
-from MemSE.nn.utils import zero_diag
-from MemSE.network_manipulations import net_param_iterator
-from MemSE.nn import mse_gamma, zero_but_diag_
 from MemSE.definitions import SUPPORTED_OPS
+from MemSE.MemristorQuant import MemristorQuant
+from MemSE.network_manipulations import (get_intermediates, net_param_iterator,
+                                         store_add_intermediates_mse,
+                                         store_add_intermediates_var)
+from MemSE.nn import mse_gamma, zero_but_diag_
+from MemSE.nn.utils import zero_diag
+
 
 def NOOP(*args, **kwargs):
     return
