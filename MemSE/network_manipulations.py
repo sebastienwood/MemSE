@@ -117,9 +117,7 @@ def build_sequential_linear(conv):
         linear.bias.data = conv.bias.repeat_interleave((linear.weight.shape[0]//conv.bias.shape[0]))
     seq = nn.Sequential(
         Padder((conv.padding[1], conv.padding[1], conv.padding[0], conv.padding[0])),
-        InspectorLayer(),
         Flattener(),
-        InspectorLayer(),
         linear,
         Reshaper(current_output_shape[1:]),
     )
