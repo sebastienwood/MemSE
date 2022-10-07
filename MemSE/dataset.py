@@ -18,30 +18,24 @@ NUM_CLASSES = {
     'CIFAR100': 100,
 }
 
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+NORM_COEFS = {
+    'ImageNet': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    'MemScale': ((0,0,0), (2, 2, 2)),
+}
 
-transform_test = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+def get_transforms(norm_coefs):
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(*norm_coefs),
+    ])
 
-
-transform_train_memscale = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0,0,0), (2, 2, 2)),
-])
-
-transform_test_memscale = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0,0,0), (2, 2, 2)),
-])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(*norm_coefs),
+    ])
+    return transform_train, transform_test
 
 
 def get_dataset(name:str):
@@ -52,15 +46,11 @@ def get_dataset(name:str):
 
 def get_dataloader(name:str, root='./data', bs=128, workers=2, memscale = False):
     dset, nclasses, input_shape = get_dataset(name)
-    if memscale == True:
-        train_set = dset(root=root, train=True, download=True, transform=transform_train_memscale)
-        train_set_clean = dset(root=root, train=True, download=True, transform=transform_test_memscale)
-        test_set = dset(root=root, train=False, download=True, transform=transform_test_memscale)
-    else:
-        train_set = dset(root=root, train=True, download=True, transform=transform_train)
-        train_set_clean = dset(root=root, train=True, download=True, transform=transform_test)
-        test_set = dset(root=root, train=False, download=True, transform=transform_test)
+    transform_train, transform_test = get_transforms(NORM_COEFS.get('MemScale' if memscale else 'ImageNet'))
 
+    train_set = dset(root=root, train=True, download=True, transform=transform_train)
+    train_set_clean = dset(root=root, train=True, download=True, transform=transform_test)
+    test_set = dset(root=root, train=False, download=True, transform=transform_test)
 
     train_loader = data.DataLoader(train_set, batch_size=bs, shuffle=True, num_workers=workers, pin_memory=True)
     train_clean_loader = data.DataLoader(train_set_clean, batch_size=bs, shuffle=False, num_workers=workers, pin_memory=True)
