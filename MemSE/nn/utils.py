@@ -112,8 +112,12 @@ def double_conv(tensor: torch.Tensor,
                 groups: int = 1,
                 ):
     '''A doubly convolution for tensor of shape [bijkijk]'''
-    weight = weight.to(dtype=torch.float16, memory_format=torch.channels_last)
-    tensor = tensor.to(dtype=torch.float16)
+    if not weight.is_cuda:
+        dtype = torch.float32
+    else:
+        dtype = torch.float16
+    weight = weight.to(dtype=dtype, memory_format=torch.channels_last)
+    tensor = tensor.to(dtype=dtype)
 
     # TODO not so sure it works for grouped convolutions
     bs = tensor.shape[0]
