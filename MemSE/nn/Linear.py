@@ -1,8 +1,11 @@
+from __future__ import annotations
 import math
 import torch
 import opt_einsum as oe
 
 from typing import Optional, List
+
+from MemSE.nn.MemSELayer import MemSELayer
 from .utils import diagonal_replace, energy_vec_batched, padded_mu_gamma
 
 
@@ -52,7 +55,9 @@ def linear_layer_logic(W:torch.Tensor,
 					   gamma_shape:Optional[List[int]]=None,
 					   compute_power:bool = True):
 
-	ct = torch.ones(W.shape[0], device=mu.device, dtype=mu.dtype)*Gmax.to(mu.device)/Wmax.to(mu.device) # TODO automated test for columnwise validity
+	ct = Gmax/Wmax
+	if ct.dim() == 0:
+		ct = ct.repeat(W.shape[0]).to(mu)
 	sigma_p = sigma / ct
 	sigma_c = sigma * math.sqrt(2) / ct
 
@@ -71,12 +76,12 @@ def linear_layer_logic(W:torch.Tensor,
 	return mu, gamma, P_tot, gamma_shape
 
 
-def linear(module, data):
-	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(module.weight,
+def linear(linear, data):
+	x, gamma, P_tot_i, gamma_shape = linear_layer_logic(linear.weight,
 														data['mu'],
 														data['gamma'],
-														module.weight.learnt_Gmax,
-														module.weight.Wmax,
+														linear.Gmax,
+														linear.Wmax,
 														data['sigma'],
 														data['r'],
 														data['gamma_shape'],
@@ -86,3 +91,38 @@ def linear(module, data):
 	data['mu'] = x
 	data['gamma'] = gamma
 	data['gamma_shape'] = gamma_shape
+ 
+
+class Linear(MemSELayer):
+	def __init__(self, linear) -> None:
+		super().__init__()
+		self.linear = linear
+		assert linear.bias is None
+  
+	def forward(self, x):
+		return self.linear(x)
+
+	@property
+	def out_features(self):
+		return self.linear.out_features
+
+	@property
+	def memristored(self):
+		return ['linear.weight']
+
+	@staticmethod
+	def memse(linear: Linear, memse_dict):
+		x, gamma, P_tot_i, gamma_shape = linear_layer_logic(linear.weight,
+															memse_dict['mu'],
+															memse_dict['gamma'],
+															linear.Gmax,
+															linear.Wmax,
+															memse_dict['sigma'],
+															memse_dict['r'],
+															memse_dict['gamma_shape'],
+															compute_power=memse_dict['compute_power'])
+		memse_dict['P_tot'] += P_tot_i
+		memse_dict['current_type'] = 'Linear'
+		memse_dict['mu'] = x
+		memse_dict['gamma'] = gamma
+		memse_dict['gamma_shape'] = gamma_shape

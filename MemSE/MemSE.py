@@ -46,7 +46,8 @@ class MemSE(nn.Module):
             assert input_shape is not None
             self.bias = nn.Parameter(torch.zeros(*input_shape))
 
-        self.learnt_Gmax = self.init_learnt_gmax(quanter, Gmax_init_Wmax)
+        #self.learnt_Gmax = self.init_learnt_gmax(quanter, Gmax_init_Wmax)
+        # instead, freeze weights
         self._var_batch = {}
         #self.clip_Gmax()
 
@@ -87,7 +88,10 @@ class MemSE(nn.Module):
             'r': self.r
         }
         for idx, s in enumerate(net_param_iterator(self.model)):
-            SUPPORTED_OPS.get(type(s), NOOP)(s, data)
+            if hasattr(s, 'memse'):
+                s.memse(s, data)
+            else:
+                SUPPORTED_OPS.get(type(s), NOOP)(s, data)
             self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
             self.post_process_gamma(data['gamma'])
 

@@ -5,7 +5,25 @@ import opt_einsum as oe
 
 from typing import Optional, List, Tuple, Union
 
-__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_']
+__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_', 'LambdaLayer', 'InspectorLayer']
+
+
+class LambdaLayer(nn.Module):
+    def __init__(self, lambd):
+        super(LambdaLayer, self).__init__()
+        self.lambd = lambd
+    def forward(self, x):
+        return self.lambd(x)
+    
+
+class InspectorLayer(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        
+    def forward(self, x):
+        print(x.shape)
+        return x
+
 
 def mse_gamma(tar, mu, gamma, verbose: bool = False):
     if len(tar.shape) != len(mu.shape):

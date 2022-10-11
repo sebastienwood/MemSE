@@ -24,9 +24,9 @@ SUPPORTED_OPS = {
 	nn.Softplus: nnM.Softplus,
 	nn.AvgPool2d: nnM.avgPool2d,
 	nn.AdaptiveAvgPool2d: nnM.avgPool2d,
-	nnM.Conv2DUF: nnM.Conv2DUF.memse,
+	#nnM.Conv2DUF: nnM.Conv2DUF.memse,
 	nn.ReLU: nnM.ReLU,
-	nnM.Padder: nnM.Padder.memse,
-	nnM.Flattener: nnM.Flattener.memse,
-	nnM.Reshaper: nnM.Reshaper.memse,
+	#nnM.Padder: nnM.Padder.memse,
+	#nnM.Flattener: nnM.Flattener.memse,
+	#nnM.Reshaper: nnM.Reshaper.memse,
 }

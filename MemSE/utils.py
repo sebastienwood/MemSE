@@ -44,3 +44,13 @@ def memory_usage(tensor):
 
 def default(val, dval):
   return val if val is not None else dval
+
+def torchize(val):
+  if isinstance(val, np.ndarray):
+    return torch.from_numpy(val)
+  elif isinstance(val, (float, int)):
+    return torch.tensor(val)
+  elif isinstance(val, torch.Tensor):
+    return val
+  else:
+    raise RuntimeError(f'{type(val)=} is not a recognized type')

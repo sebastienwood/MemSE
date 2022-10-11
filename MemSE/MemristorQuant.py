@@ -1,20 +1,137 @@
-from enum import Enum
 import torch
 import torch.nn as nn
 import numpy as np
 import copy
 from MemSE.definitions import WMAX_MODE
 from MemSE.nn import Conv2DUF
+from MemSE.utils import default, torchize
 
 from typing import Union
 
 __all__ = ['MemristorQuant']
 
+TYPES_HANDLED = {
+	Conv2DUF: ['weight', 'bias'],
+	nn.Linear: ['weight'],
+}
+
+class CrossBar(object):
+	def __init__(self, module: nn.Module) -> None:
+		self.module = module
+		self.tensors = {k:getattr(module,k) for k in TYPES_HANDLED[type(module)]}
+		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in TYPES_HANDLED[type(module)]}
+		self.intermediate_tensors = {}
+
+		self._Wmax = torch.tensor([0.] * module.out_features)
+		module.Wmax = self.Wmax
+		module.Gmax = nn.Parameter(torch.tensor([0.] * module.out_features))
+
+	@property
+	def _unified_view(self):
+		if len(self.tensors) == 1:
+			return list(self.tensors.values())[0]
+		else:
+			return torch.cat((x for x in self.tensors.values() if len(x.shape) == 2 else x.unsqueeze(0)), dim=1)
+
+	@property
+	def out_features(self):
+		return self.module.out_features
+
+	@property
+	def Wmax(self):
+		if torch.all(self._Wmax == 0.):
+			raise ValueError('Wmax has probably not been init. correctly (value = 0)')
+		return self._Wmax
+
+	@Wmax.setter
+	def Wmax(self, val):
+		if isinstance(val, torch.Tensor) and val.numel() == self._Wmax.numel():
+			self._Wmax.data.copy_(val)
+		else:
+			self._Wmax.fill_(val)
+
+	@property
+	def Gmax(self):
+		if torch.all(self.module.Gmax == 0.):
+			raise ValueError('Gmax has probably not been init. correctly (value = 0)')
+		return self.module.Gmax
+
+	@Gmax.setter
+	def Gmax(self, val):
+		if isinstance(val, torch.Tensor) and val.numel() == self.module.Gmax.numel():
+			self.module.Gmax.copy_(val)
+		else:
+			self.module.Gmax.fill_(val)
+
+	@property
+	def c(self):
+		return self.Gmax / self.Wmax
+
+	def update_w_max(self, mode: WMAX_MODE):
+		if mode in [WMAX_MODE.LAYERWISE, WMAX_MODE.ALL]:
+			res = torch.max(torch.abs(self._unified_view))
+		elif mode == WMAX_MODE.COLUMNWISE:
+			res = torch.max(torch.abs(self._unified_view), dim=1).values
+		else:
+			raise ValueError("Not a valid WMAX_MODE")
+		self.Wmax = res
+		return res
+
+	def unquant(self):
+		if self.quanted:
+			for k in self.tensors.keys():
+				self.tensors[k].data.copy_(self.saved_tensors[k].to(self.tensors[k].data))
+			self.intermediate_tensors.clear()
+		self.quanted = False
+		self.noised = False
+
+	def quant(self, N: int, c_one: bool = False):
+		if self.quanted:
+			self.unquant()
+		self.manage_c_one(c_one)
+		for k in self.tensors.keys():
+			true_value = self.tensors[k].data
+			self.saved_tensors[k].copy_(true_value.clone().cpu())
+			self._quantize(true_value, N)
+			self.intermediate_tensors[k] = true_value.clone().cpu()
+			self.tensors[k].data.copy_(true_value)
+		self.rescale()
+		self.quanted = True
+
+	def renoise(self, std_noise: float):
+		assert self.quanted, 'Cannot renoise the original representation'
+		for k in self.tensors.keys():
+			self.tensors[k].data.copy_(self.intermediate_tensors[k])
+			shape, device = self.tensors[k].shape, self.tensors[k].device
+			self.tensors[k].data += torch.normal(mean=0., std=std_noise, size=shape, device=device)
+			self.tensors[k].data -= torch.normal(mean=0., std=std_noise, size=shape, device=device)
+		self.rescale()
+		self.noised = True
+
+	def denoise(self):
+		assert self.quanted, 'Cannot renoise the original representation'
+		for k in self.tensors.keys():
+			self.tensors[k].data.copy_(self.intermediate_tensors[k])
+		self.rescale()
+		self.noised = False
+
+	def rescale(self):
+		for k in self.tensors.keys():
+			self.tensors[k].data.copy_(torch.einsum('ij,i -> ij', self.tensors[k].data, 1/self.c))
+
+	def manage_c_one(self, c_one):
+		if c_one:
+			self.Gmax.data.fill_(self.Wmax)
+
+	@torch.no_grad()
+	def _quantize(self, tensor, N: int) -> None:
+		delta = self.Gmax / N
+		tensor.copy_(torch.einsum('ij,i -> ij', torch.floor(torch.einsum('ij,i -> ij', tensor, (self.c/delta))), delta))
+		
 
 class MemristorQuant(object):
 	def __init__(self,
 				 model: nn.Module,
-				 types_handled = [nn.Linear, Conv2DUF],
 				 N: int = 128,
 				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.ALL,
 				 Gmax=0.1,
@@ -24,33 +141,20 @@ class MemristorQuant(object):
 		model.__attached_memquant = self
 		self.quanted = False
 		self.noised = False
-		
-		self.saved_params = []
-		self.actual_params = []
-		self.n_vars = []
-		self.Wmax = []
-		self.intermediate_params = {}
-		self.c = {}
-		
-		self.init_wmax(wmax_mode)
-
-		for m in model.modules():
-			if type(m) in types_handled:
-				self.saved_params.append(m.weight.data.clone().cpu())
-				self.actual_params.append(m.weight)
-				self.n_vars.append(m.out_features)
-		for idx, m in enumerate(self.saved_params):
-			self.Wmax.append(self._Wmax(m))
-			self.actual_params[idx].Wmax = self.Wmax[idx]
-		
 		self.N = N
-
-		if Gmax is None:
-			Gmax = 0.1
+		self.std_noise = std_noise
+		self.init_wmax(wmax_mode)
+		Gmax = default(Gmax, 0.1)
+		self.crossbars = []
+		for m in model.modules():
+			if type(m) in TYPES_HANDLED.keys():
+				self.crossbars.append(CrossBar(m))
+		self.update_w_max()
 		self.init_gmax(Gmax)
 
-		self.std_noise = std_noise
-		#print(f"Initialized memquant with {len(self.saved_params)} parameters quantified")
+	def broadcast(self, fx: str, *args, **kwargs):
+		for cb in self.crossbars:
+			getattr(cb, fx)(*args, **kwargs)
 
 	@property
 	def std_noise(self):
@@ -92,25 +196,25 @@ class MemristorQuant(object):
 		return res
 
 	def init_gmax(self, Gmax):
+		Gmax = torchize(Gmax)
 		if self.wmax_mode == WMAX_MODE.ALL:
-			if isinstance(Gmax, float):
-				self.Gmax = np.full((len(self.saved_params)), Gmax)
-			elif isinstance(Gmax, np.ndarray) and Gmax.size == 1:
-				self.Gmax = np.full((len(self.saved_params)), Gmax[0])
-			elif isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params):
-				self.Gmax = np.copy(Gmax)
-			else:
-				raise ValueError('In network mode, expecting either float or ndarray of size 1')
+			assert Gmax.numel() == 1
+			for t in self.crossbars:
+				t.Gmax = Gmax.item()
+
 		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
-			assert isinstance(Gmax, np.ndarray) and Gmax.size == len(self.saved_params)
-			self.Gmax = np.copy(Gmax)
+			for t, g in zip(self.crossbars, Gmax.tolist()):
+				t.Gmax = g
+
 		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
-			assert isinstance(Gmax, np.ndarray) and Gmax.size == sum(self.n_vars)
-			self.Gmax = np.split(np.copy(Gmax), np.cumsum(self.n_vars))[:-1]
+			assert Gmax.numel() == sum([t.out_features for t in self.crossbars]) and len(Gmax.shape) == 1
+			Gmax = torch.split(Gmax, [t.out_features for t in self.crossbars])
+			for t, g in zip(self.crossbars, Gmax):
+				t.Gmax = g
+
 		else:
 			raise ValueError('Not a supported wmax mode')
-		assert len(self.Gmax) == len(self.saved_params), 'Gmax is not of the right size'
-		self._initial_Gmax = copy.deepcopy(self.Gmax)
+		#self._initial_Gmax = copy.deepcopy(Gmax)
 		self.param_update()
 
 	def init_wmax(self, wmax_mode):
@@ -132,82 +236,29 @@ class MemristorQuant(object):
 
 	def quant(self, c_one=False):
 		self._last_c_one = c_one
-		if self.quanted:
-			self.unquant()
-		for i in range(len(self.saved_params)):
-			true_value = self.actual_params[i].data
-			self.saved_params[i].copy_(true_value.clone().cpu())
-			self._quantize(true_value, i, c_one)
-			self.intermediate_params[i] = true_value.clone().cpu()
-			self.actual_params[i].data.copy_(true_value)
-		self.rescale()
+		self.broadcast('unquant')
+		self.update_w_max()
+		self.broadcast('quant', N=self.N, c_one=c_one)
 		self.quanted = True
 
 	def renoise(self):
-		assert self.quanted, 'Cannot renoise the original representation'
-		for i, inter in self.intermediate_params.items():
-			self.actual_params[i].data.copy_(self.intermediate_params[i])
-			self.actual_params[i].data += torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
-			self.actual_params[i].data -= torch.normal(mean=0., std=self.std_noise, size=self.actual_params[i].shape, device=self.actual_params[i].device)
-		self.rescale()
-		self.noised = True
+		self.broadcast('renoise', std_noise=self.std_noise)
 
 	def denoise(self):
-		assert self.quanted, 'Cannot renoise the original representation'
-		for i, inter in self.intermediate_params.items():
-			self.actual_params[i].data.copy_(self.intermediate_params[i])
-		self.rescale()
-		self.noised = False
+		self.broadcast('denoise')
 
 	def rescale(self):
-		for i, _ in self.intermediate_params.items():
-			if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
-				self.actual_params[i].data /= self.c[i]
-			else:
-				self.actual_params[i].data.copy_(torch.einsum('ij,i -> ij', self.actual_params[i].data, 1/self.c[i]))
+		self.broadcast('rescale')
 
 	def unquant(self):
-		if self.quanted:
-			for i in range(len(self.saved_params)):
-				self.actual_params[i].data.copy_(self.saved_params[i].to(self.actual_params[i].data))
+		self.broadcast('unquant')
 		self.quanted = False
 		self.noised = False
 
 	@torch.no_grad()
-	def _quantize(self, tensor, layer_idx=None, c_one=False) -> None:
-		Wmax = self._Wmax(tensor, layer_idx)
-		if c_one:
-			if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
-				c = 1.
-				self.Gmax[layer_idx] = Wmax
-			else:
-				c = torch.ones_like(Wmax).to(tensor)
-				self.Gmax[layer_idx] = self.Wmax[layer_idx] # fill in place
-		else:
-			self.Gmax[layer_idx] = self._initial_Gmax[layer_idx]
-		Gmax = torch.from_numpy(self.Gmax[layer_idx]).to(tensor) if self.wmax_mode == WMAX_MODE.COLUMNWISE and isinstance(self.Gmax[layer_idx], np.ndarray) else self.Gmax[layer_idx]
-		if not c_one:
-			c = Gmax / Wmax
-		if layer_idx is not None:
-			self.c[layer_idx] = c
-		delta = Gmax / self.N
-
-		if self.wmax_mode in [WMAX_MODE.ALL, WMAX_MODE.LAYERWISE]:
-			tensor.copy_((torch.floor(tensor * c / delta)) * delta)
-		else:
-			tensor.copy_(torch.einsum('ij,i -> ij', torch.floor(torch.einsum('ij,i -> ij', tensor, (c/delta))), delta))
-
-	@torch.no_grad()
-	def _Wmax(self, tensor, layer_idx=None):
-		assert len(tensor.shape) == 2, 'Only works for 2d tensors !'
+	def update_w_max(self) -> None:
+		res = [t.update_w_max(self.wmax_mode) for t in self.crossbars]
 		if self.wmax_mode == WMAX_MODE.ALL:
-			res = max([torch.max(torch.abs(t)) for t in self.saved_params])
-		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
-			res = torch.max(torch.abs(tensor))
-		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
-			res = torch.max(torch.abs(tensor), dim=1).values
-		else:
-			raise ValueError('Mode is not valid')
-		if layer_idx is not None:
-			self.Wmax[layer_idx] = res
-		return res
+			res = max(res)
+			for t in self.crossbars:
+				t.Wmax = res

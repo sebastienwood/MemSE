@@ -86,22 +86,6 @@ def convmatrix2d(kernel, image_shape, padding, stride):
 
     return m.flatten(0, len(kernel.shape[2:])).flatten(1)
 
-class LambdaLayer(nn.Module):
-    def __init__(self, lambd):
-        super(LambdaLayer, self).__init__()
-        self.lambd = lambd
-    def forward(self, x):
-        return self.lambd(x)
-    
-
-class InspectorLayer(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        
-    def forward(self, x):
-        print(x.shape)
-        return x
-
 
 @torch.no_grad()
 def build_sequential_linear(conv):
