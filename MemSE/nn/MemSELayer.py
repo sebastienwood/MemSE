@@ -1,8 +1,6 @@
-from multiprocessing.managers import ValueProxy
-from MemristorQuant import TYPES_HANDLED
-
-
 from __future__ import annotations
+from MemSE.nn.definitions import TYPES_HANDLED
+import torch.nn as nn
 
 
 def add_type(func):

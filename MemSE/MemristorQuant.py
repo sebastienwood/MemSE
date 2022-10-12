@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import copy
 from MemSE.definitions import WMAX_MODE
+from MemSE.nn.definitions import TYPES_HANDLED
 from MemSE.nn import Conv2DUF
 from MemSE.utils import default, torchize
 
@@ -10,10 +11,6 @@ from typing import Union
 
 __all__ = ['MemristorQuant']
 
-TYPES_HANDLED = {
-	Conv2DUF: ['weight', 'bias'],
-	nn.Linear: ['weight'],
-}
 
 class CrossBar(object):
 	def __init__(self, module: nn.Module) -> None:
@@ -31,7 +28,7 @@ class CrossBar(object):
 		if len(self.tensors) == 1:
 			return list(self.tensors.values())[0]
 		else:
-			return torch.cat((x for x in self.tensors.values() if len(x.shape) == 2 else x.unsqueeze(0)), dim=1)
+			return torch.cat((x if len(x.shape) == 2 else x.unsqueeze(0) for x in self.tensors.values()), dim=1)
 
 	@property
 	def out_features(self):
