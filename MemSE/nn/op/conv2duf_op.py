@@ -20,7 +20,7 @@ module_path = os.path.dirname(__file__)
 
 
 @njit(parallel=True, nogil=True, boundscheck=False, fastmath=True)
-def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
+def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3, bias: bool, padding, stride):
     for bi in prange(input.shape[0]):
         for i0 in prange(input.shape[2]):
             for j0 in prange(input.shape[3]):
@@ -52,13 +52,15 @@ def op_numba(input, gamma, mu, c, weight_shape_1, weight_shape_2, weight_shape_3
                                     j0pji_padded = j0pji - padding[1]
                                     for ci in range(weight_shape_1):
                                         v += (mu[bi, ci, i0ii_padded, j0ji_padded] * mu[bi, ci, i0pii_padded, j0pji_padded] + gamma[bi, ci, i0ii_padded, j0ji_padded, ci, i0pii_padded, j0pji_padded])
+                        if bias:
+                            v += 1.
                         for c0 in range(input.shape[1]):
                             input[bi, c0, i0, j0, c0, i0p, j0p] += c[c0] * v
     return input
 
 
 @cuda.jit
-def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, padding, stride):
+def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3, bias: bool, padding, stride):
     sharedC = cuda.shared.array(shape=512, dtype=numba.float32)
     bi, i0, j0 = cuda.grid(3)
     x_gridsize, y_gridsize, z_gridsize = cuda.gridsize(3)
@@ -107,6 +109,8 @@ def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3
                                     for ci in range(weight_shape_1):
                                         v += gamma_cache[ci]
                         # For each c0 update input
+                        if bias:
+                            v += 1.
                         for c0 in range(input.shape[1]):
                             input[bi, c0, i0, j0, c0, i0p, j0p] += v * sharedC[c0]
                             #cuda.atomic.add(input, (bi, c0, i0, j0, c0, i0p, j0p), v * sharedC[c0])
@@ -117,8 +121,8 @@ def op_numba_c_f(input, gamma, c, weight_shape_1, weight_shape_2, weight_shape_3
 
 class Conv2DUF_op(Function):
     @staticmethod
-    def forward(ctx, input, gamma, mu, c, weight_shape, padding, stride):
-        return torch.from_numpy(op_numba(input.numpy(), gamma.numpy(), mu.numpy(), c.numpy(), weight_shape[1], weight_shape[2], weight_shape[3], padding=padding, stride=stride))
+    def forward(ctx, input, gamma, mu, c, weight_shape, bias: bool, padding, stride):
+        return torch.from_numpy(op_numba(input.numpy(), gamma.numpy(), mu.numpy(), c.numpy(), weight_shape[1], weight_shape[2], weight_shape[3], bias, padding=padding, stride=stride))
 
     @staticmethod
     def backward(ctx, grad_out):
@@ -128,7 +132,7 @@ class Conv2DUF_op(Function):
 TEST = False
 class Conv2DUF_op_CUDA(Function):
     @staticmethod
-    def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, gamma_shape, mu: torch.Tensor, c, weight_shape, padding, stride):
+    def forward(ctx, input: torch.Tensor, gamma: torch.Tensor, gamma_shape, mu: torch.Tensor, c, weight_shape, bias: bool, padding, stride):
         gamma_permute = torch.diagonal(oe.contract('bcij,bklm->bijlmck', mu, mu), dim1=-2, dim2=-1)
         if gamma_shape is None:
             gamma_permute += torch.diagonal(torch.permute(gamma, (0, 2, 3, 5, 6, 1, 4)), dim1=-2, dim2=-1)
@@ -139,14 +143,14 @@ class Conv2DUF_op_CUDA(Function):
             blockspergrid_x = min(math.ceil((weight_shape[1] + threadsperblock[0] - 1) / threadsperblock[0]), 1024)
             blockspergrid_y = min(math.ceil((grid_bi + threadsperblock[1] - 1)/ threadsperblock[1]), 1024)
             blockspergrid = (blockspergrid_x, blockspergrid_y)
-            op_numba_w[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
+            op_numba_w[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], bias, padding, stride)
         else:
             threadsperblock= (8,8,8)# 4)
             blockspergrid_x = math.ceil(input.shape[0] / threadsperblock[0])
             blockspergrid_y = math.ceil(input.shape[2] / threadsperblock[1])
             blockspergrid_z = math.ceil(input.shape[3] / threadsperblock[2])
             blockspergrid = (blockspergrid_x, blockspergrid_y, blockspergrid_z)
-            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], padding, stride)
+            op_numba_c_f[blockspergrid, threadsperblock](input.detach(), gamma_permute.detach(), c.detach(), weight_shape[1], weight_shape[2], weight_shape[3], bias, padding, stride)
         return input
 
     @staticmethod
@@ -158,7 +162,7 @@ def next_power_of_2(x):
     return 1<<(x-1).bit_length()
 
 
-def conv2duf_op(input, gamma, gamma_shape, mu, c, weight_shape, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1):
+def conv2duf_op(input, gamma, gamma_shape, mu, c, weight_shape, bias, stride: Tuple[int]=(1,1), padding: int = 0, dilation: int = 1, groups: int = 1):
     if isinstance(stride, int):
         stride = (stride, stride)
     if isinstance(dilation, int):
@@ -173,16 +177,17 @@ def conv2duf_op(input, gamma, gamma_shape, mu, c, weight_shape, stride: Tuple[in
     assert input.shape[1] == c.shape[0]
     assert weight_shape[1] == mu.shape[1]
     assert weight_shape[0] == input.shape[1]
+    bias = True if bias is not None else False
 
     if input.device.type == "cpu":
         # NOTE @sebastienwood "cpu" version is kept intact as a 100% sure version of the code
         # it could be easily optimized using the latests ideas
         # major drawback is DRAM usage: gamma is always initialized 
         gamma = gamma if gamma_shape is None else torch.zeros(gamma_shape, device=mu.device, dtype=mu.dtype)
-        Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, padding, stride)
+        Conv2DUF_op.apply(input, gamma, mu, c, weight_shape, bias, padding, stride)
         return input
     else:
-        input = Conv2DUF_op_CUDA.apply(input, gamma, gamma_shape, mu, c.to(input), weight_shape, padding, stride)
+        input = Conv2DUF_op_CUDA.apply(input, gamma, gamma_shape, mu, c.to(input), weight_shape, bias, padding, stride)
         return input
 
 

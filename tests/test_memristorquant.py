@@ -6,7 +6,7 @@ import torch.nn as nn
 import pytest
 
 @pytest.mark.parametrize("method", METHODS.values())
-@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("device", [DEVICES[0]])
 @pytest.mark.parametrize("mode", [WMAX_MODE.ALL, WMAX_MODE.COLUMNWISE, WMAX_MODE.LAYERWISE])
 def test_columnwise(method, device, mode):
     net = MODELS['vgg_features']

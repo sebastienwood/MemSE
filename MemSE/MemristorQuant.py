@@ -15,12 +15,14 @@ __all__ = ['MemristorQuant']
 class CrossBar(object):
 	def __init__(self, module: nn.Module) -> None:
 		self.module = module
-		self.tensors = {k:getattr(module,k) for k in TYPES_HANDLED[type(module)]}
-		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in TYPES_HANDLED[type(module)]}
+		self.quanted, self.noised = False, False
+		existing_k = [k for k in TYPES_HANDLED[type(module)] if hasattr(module, k) and getattr(module, k) is not None]
+		self.tensors = {k:getattr(module,k) for k in existing_k}
+		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in existing_k}
 		self.intermediate_tensors = {}
 
 		self._Wmax = torch.tensor([0.] * module.out_features)
-		module.Wmax = self.Wmax
+		module.Wmax = self._Wmax
 		module.Gmax = nn.Parameter(torch.tensor([0.] * module.out_features))
 
 	@property
@@ -56,9 +58,9 @@ class CrossBar(object):
 	@Gmax.setter
 	def Gmax(self, val):
 		if isinstance(val, torch.Tensor) and val.numel() == self.module.Gmax.numel():
-			self.module.Gmax.copy_(val)
+			self.module.Gmax.data.copy_(val)
 		else:
-			self.module.Gmax.fill_(val)
+			self.module.Gmax.data.fill_(val)
 
 	@property
 	def c(self):
@@ -200,11 +202,16 @@ class MemristorQuant(object):
 				t.Gmax = Gmax.item()
 
 		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
+			if Gmax.dim() == 0:
+				Gmax = Gmax.repeat(len(self.crossbars))
 			for t, g in zip(self.crossbars, Gmax.tolist()):
 				t.Gmax = g
 
 		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
-			assert Gmax.numel() == sum([t.out_features for t in self.crossbars]) and len(Gmax.shape) == 1
+			size_column = sum([t.out_features for t in self.crossbars])
+			if Gmax.dim() == 0:
+				Gmax = Gmax.repeat(size_column)
+			assert Gmax.numel() == size_column and len(Gmax.shape) == 1, Gmax
 			Gmax = torch.split(Gmax, [t.out_features for t in self.crossbars])
 			for t, g in zip(self.crossbars, Gmax):
 				t.Gmax = g
