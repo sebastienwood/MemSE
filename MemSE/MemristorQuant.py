@@ -118,7 +118,7 @@ class CrossBar(object):
 
 	def manage_c_one(self, c_one):
 		if c_one:
-			self.Gmax.data.fill_(self.Wmax)
+			self.Gmax.data.copy_(self.Wmax)
 
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:
