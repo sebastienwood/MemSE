@@ -66,6 +66,12 @@ class CrossBar(object):
 	def c(self):
 		return self.Gmax / self.Wmax
 
+	def info(self):
+		print(f'General info on Crossbar of {self.module.__class__.__name__}')
+		for k, v in self.tensors.items():
+			print(f'{k=} of shape {v.shape}')
+		print('-'*10)
+
 	def update_w_max(self, mode: WMAX_MODE):
 		if mode in [WMAX_MODE.LAYERWISE, WMAX_MODE.ALL]:
 			res = torch.max(torch.abs(self._unified_view))
