@@ -30,7 +30,7 @@ class CrossBar(object):
 		if len(self.tensors) == 1:
 			return list(self.tensors.values())[0]
 		else:
-			return torch.cat((x if len(x.shape) == 2 else x.unsqueeze(0) for x in self.tensors.values()), dim=1)
+			return torch.cat(tuple(x if len(x.shape) == 2 else x.unsqueeze(1) for x in self.tensors.values()), dim=1)
 
 	@property
 	def out_features(self):
@@ -121,8 +121,9 @@ class CrossBar(object):
 		self.noised = False
 
 	def rescale(self):
-		for k in self.tensors.keys():
-			self.tensors[k].data.copy_(torch.einsum('ij,i -> ij', self.tensors[k].data, 1/self.c))
+		for v in self.tensors.values():
+			inp_shape = 'i' if len(v.shape) == 1 else 'ij'
+			v.data.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', v.data, 1/self.c))
 
 	def manage_c_one(self, c_one):
 		if c_one:
@@ -131,7 +132,8 @@ class CrossBar(object):
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:
 		delta = self.Gmax / N
-		tensor.copy_(torch.einsum('ij,i -> ij', torch.floor(torch.einsum('ij,i -> ij', tensor, (self.c/delta))), delta))
+		inp_shape = 'i' if len(tensor.shape) == 1 else 'ij'
+		tensor.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', torch.floor(torch.einsum(f'{inp_shape},i -> {inp_shape}', tensor, (self.c/delta))), delta))
 		
 
 class MemristorQuant(object):
