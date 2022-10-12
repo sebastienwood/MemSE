@@ -285,7 +285,7 @@ def fuse_conv_bn(model, model_name: str, model_fusion=MODELS_FUSION):
 def fuse_linear_bias(linear: nn.Linear):
     if linear.bias is None:
         return linear
-    fused_linear = nn.Linear(linear.weight.shape[1], linear.weight.shape[0] + 1, bias=False)
+    fused_linear = nn.Linear(linear.weight.shape[1] + 1, linear.weight.shape[0], bias=False)
     biases = linear.bias.repeat_interleave((linear.weight.shape[0]//linear.bias.shape[0])).unsqueeze(1)
     fused_linear.weight.data = torch.cat((linear.weight, biases), dim=1)
     seq = nn.Sequential(
