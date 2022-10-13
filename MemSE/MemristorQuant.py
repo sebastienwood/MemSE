@@ -15,7 +15,7 @@ __all__ = ['MemristorQuant']
 class CrossBar(object):
 	def __init__(self, module: nn.Module) -> None:
 		self.module = module
-		self.quanted, self.noised = False, False
+		self.quanted, self.noised, self.c_one = False, False, False
 		existing_k = [k for k in TYPES_HANDLED[type(module)] if hasattr(module, k) and getattr(module, k) is not None]
 		self.tensors = {k:getattr(module,k) for k in existing_k}
 		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in existing_k}
@@ -64,6 +64,8 @@ class CrossBar(object):
 
 	@property
 	def c(self):
+		if self.c_one:
+			return torch.ones_like(self.Wmax)
 		return self.Gmax / self.Wmax
 
 	def info(self):
@@ -93,7 +95,7 @@ class CrossBar(object):
 	def quant(self, N: int, c_one: bool = False):
 		if self.quanted:
 			self.unquant()
-		self.manage_c_one(c_one)
+		self.c_one = c_one
 		for k in self.tensors.keys():
 			true_value = self.tensors[k].data
 			self.saved_tensors[k].copy_(true_value.clone().cpu())
@@ -125,13 +127,9 @@ class CrossBar(object):
 			inp_shape = 'i' if len(v.shape) == 1 else 'ij'
 			v.data.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', v.data, 1/self.c))
 
-	def manage_c_one(self, c_one):
-		if c_one:
-			self.Gmax.data.copy_(self.Wmax)
-
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:
-		delta = self.Gmax / N
+		delta = self.Gmax if not self.c_one else self.Wmax / N
 		inp_shape = 'i' if len(tensor.shape) == 1 else 'ij'
 		tensor.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', torch.floor(torch.einsum(f'{inp_shape},i -> {inp_shape}', tensor, (self.c/delta))), delta))
 		
@@ -180,6 +178,14 @@ class MemristorQuant(object):
 	def N(self, N):
 		self._N = N
 		self.param_update()
+
+	@property
+	def Gmax(self):
+		return torch.cat([t.Gmax for t in self.crossbars])
+
+	@Gmax.setter
+	def Gmax(self, val):
+		self.init_gmax(val)
 
 	def param_update(self):
 		if self.quanted:
