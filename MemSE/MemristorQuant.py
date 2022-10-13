@@ -128,7 +128,7 @@ class CrossBar(object):
 
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:
-		delta = self.Gmax if not self.c_one else self.Wmax / N
+		delta = self.Gmax / N if not self.c_one else self.Wmax / N
 		inp_shape = 'i' if len(tensor.shape) == 1 else 'ij'
 		tensor.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', torch.floor(torch.einsum(f'{inp_shape},i -> {inp_shape}', tensor, (self.c/delta))), delta))
 		
