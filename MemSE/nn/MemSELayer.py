@@ -17,12 +17,12 @@ class MemSELayer(nn.Module):
     def forward(self, x):
         raise ValueError('This property should be set in chilren class')
     
-    @property
-    def out_features(self):
-        raise ValueError('This property should be set in chilren class')
-    
     @staticmethod
     def memse(layer: MemSELayer, memse_dict):
+        raise ValueError('This property should be set in chilren class')
+    
+    @property
+    def out_features(self):
         raise ValueError('This property should be set in chilren class')
     
     @property

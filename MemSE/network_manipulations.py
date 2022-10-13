@@ -298,7 +298,7 @@ def fuse_linear_bias(linear: nn.Linear):
 def net_param_iterator(model: nn.Module) -> Iterator:
     ignored = []
     for _, module in model.named_modules():
-        if type(module) in SUPPORTED_OPS.keys():
+        if type(module) in SUPPORTED_OPS.keys() or hasattr(module, 'memse'):
             yield module
         elif type(module) in UNSUPPORTED_OPS:
             raise ValueError(f'The network is using an unsupported operation {type(module)}')

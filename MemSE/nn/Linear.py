@@ -91,14 +91,14 @@ def linear(linear, data):
 	data['mu'] = x
 	data['gamma'] = gamma
 	data['gamma_shape'] = gamma_shape
- 
+
 
 class Linear(MemSELayer):
 	def __init__(self, linear) -> None:
 		super().__init__()
 		self.linear = linear
 		assert linear.bias is None
-  
+
 	def forward(self, x):
 		return self.linear(x)
 

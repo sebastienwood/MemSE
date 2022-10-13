@@ -15,5 +15,6 @@ def test_columnwise(method, device, mode):
     memse = nn2memse(conv2duf, mode=mode)
     memse.quanter.quant()
     memse.quanter.unquant()
+    memse.forward(inp)
     # TODO: only testing init right now, should test further
 
