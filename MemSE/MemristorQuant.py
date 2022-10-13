@@ -21,9 +21,8 @@ class CrossBar(object):
 		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in existing_k}
 		self.intermediate_tensors = {}
 
-		self._Wmax = torch.tensor([0.] * module.out_features)
-		module.Wmax = self._Wmax
-		module.Gmax = nn.Parameter(torch.tensor([0.] * module.out_features))
+		module.register_buffer('Wmax', torch.tensor([0.] * module.out_features))
+		module.register_parameter('Gmax', nn.Parameter(torch.tensor([0.] * module.out_features)))
 
 	@property
 	def _unified_view(self):
@@ -38,16 +37,16 @@ class CrossBar(object):
 
 	@property
 	def Wmax(self):
-		if torch.all(self._Wmax == 0.):
+		if torch.all(self.module.Wmax == 0.):
 			raise ValueError('Wmax has probably not been init. correctly (value = 0)')
-		return self._Wmax
+		return self.module.Wmax
 
 	@Wmax.setter
 	def Wmax(self, val):
-		if isinstance(val, torch.Tensor) and val.numel() == self._Wmax.numel():
-			self._Wmax.data.copy_(val)
+		if isinstance(val, torch.Tensor) and val.numel() == self.module.Wmax.numel():
+			self.module.Wmax.data.copy_(val)
 		else:
-			self._Wmax.fill_(val)
+			self.module.Wmax.fill_(val)
 
 	@property
 	def Gmax(self):

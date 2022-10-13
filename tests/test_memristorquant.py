@@ -6,13 +6,13 @@ import torch.nn as nn
 import pytest
 
 @pytest.mark.parametrize("method", METHODS.values())
-@pytest.mark.parametrize("device", [DEVICES[0]])
+@pytest.mark.parametrize("device", [DEVICES[1]])
 @pytest.mark.parametrize("mode", [WMAX_MODE.ALL, WMAX_MODE.COLUMNWISE, WMAX_MODE.LAYERWISE])
 def test_columnwise(method, device, mode):
     net = MODELS['johnet']
     conv2duf, o = get_net_transformed(net, method, inp)
-    conv2duf, o = conv2duf.to(device), o.to(device)
-    memse = nn2memse(conv2duf, mode=mode)
+    conv2duf, o = conv2duf, o.to(device)
+    memse = nn2memse(conv2duf, mode=mode).to(device)
     memse.quanter.quant()
     memse.quanter.unquant()
     memse.forward(inp)
