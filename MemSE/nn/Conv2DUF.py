@@ -15,12 +15,31 @@ class Conv2DUF(nn.Module):
         assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
         self.c = [conv]
         self.output_shape = output_shape
+        for k in ['kernel_size', 'padding', 'dilation', 'groups', 'stride', 'output_padding', 'padding_mode', 'in_channels', 'out_channels']:
+            setattr(self, k, getattr(conv, k))
 
         self.register_parameter('weight', nn.Parameter(conv.weight.detach().clone().view(conv.weight.shape[0], -1)))
         if conv.bias is not None:
             self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
         else:
             self.bias = None
+            
+    def extra_repr(self) -> str:
+        s = ('{in_channels}, {out_channels}, kernel_size={kernel_size}'
+             ', stride={stride}')
+        if self.padding != (0,) * len(self.padding):
+            s += ', padding={padding}'
+        if self.dilation != (1,) * len(self.dilation):
+            s += ', dilation={dilation}'
+        if self.output_padding != (0,) * len(self.output_padding):
+            s += ', output_padding={output_padding}'
+        if self.groups != 1:
+            s += ', groups={groups}'
+        if self.bias is None:
+            s += ', bias=False'
+        if self.padding_mode != 'zeros':
+            s += ', padding_mode={padding_mode}'
+        return s.format(**self.__dict__)
 
     def forward(self, x, weight=None, bias=None):
         # inp_unf = self.unfold_input(x)
@@ -40,26 +59,6 @@ class Conv2DUF(nn.Module):
         return self.original_weight.shape[0]
 
     @property
-    def kernel_size(self):
-        return self.c[0].kernel_size
-
-    @property
-    def padding(self):
-        return self.c[0].padding
-
-    @property
-    def dilation(self):
-        return self.c[0].dilation
-
-    @property
-    def groups(self):
-        return 'adaptive' if self.c[0].groups == 'adaptive' else int(self.c[0].groups)
-
-    @property
-    def stride(self):
-        return self.c[0].stride
-
-    @property
     def out_features_numel(self):
         return self.output_shape.numel()
 
@@ -73,7 +72,7 @@ class Conv2DUF(nn.Module):
         }
 
     def unfold_input(self, x):
-        return nn.functional.unfold(x, self.c[0].kernel_size, self.c[0].dilation, self.c[0].padding, self.c[0].stride)
+        return nn.functional.unfold(x, self.kernel_size, self.dilation, self.padding, self.stride)
 
     @staticmethod
     def memse(conv2duf: Conv2DUF, memse_dict):
