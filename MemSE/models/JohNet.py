@@ -3,7 +3,7 @@ import torch.nn as nn
 import math
 from MemSE.nn import Flattener
 
-__all__ = ['make_JohNet']
+__all__ = ['make_JohNet', 'make_small_JohNet']
 
 class JohNet(nn.Module):
     def __init__(self, features, num_classes=1000, classifier_size: int = 16):
@@ -63,6 +63,7 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 cfg =[16, 16, 'A', 'D0.1', 32, 32, 'A', 'D0.1', 64, 64, 64, 'A','D0.1', 128,128, 128, 'A','D0.2',  256,256,256,'A','D0.2']
+cfg_small =[16, 16, 'A', 'D0.1', 32, 32, 'A', 'D0.1', 32, 32, 32, 'A','D0.1', 32,32, 32, 'A','D0.2',  32,32,32,'A','D0.2']
 
 
 
@@ -71,10 +72,14 @@ def make_JohNet(**kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = JohNet(make_layers(cfg, batch_norm=True), classifier_size=256, **kwargs)
+    cfg_ = kwargs.pop('cfg', cfg)
+    model = JohNet(make_layers(cfg_, batch_norm=True), classifier_size=cfg_[-3], **kwargs)
     return model
+
+def make_small_JohNet(**kwargs):
+    return make_JohNet(cfg=cfg_small, **kwargs)
 
 
 if __name__ == '__main__':
-    net = make_JohNet()
+    net = make_small_JohNet()
     print(net)
