@@ -1,4 +1,6 @@
+import gc
 import math
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,11 +12,12 @@ from tqdm import tqdm
 
 from MemSE.definitions import SUPPORTED_OPS
 from MemSE.MemristorQuant import MemristorQuant
-from MemSE.network_manipulations import (get_intermediates, net_param_iterator,
-                                         store_add_intermediates_mse,
-                                         store_add_intermediates_var)
-from MemSE.nn import mse_gamma, zero_but_diag_
-from MemSE.nn.utils import zero_diag
+from MemSE.fx import (get_intermediates,
+                      net_param_iterator,
+                      store_add_intermediates_mse,
+                      store_add_intermediates_var)
+from MemSE.nn import mse_gamma, zero_but_diag_, zero_diag
+from MemSE.utils import memory_report
 
 
 def NOOP(*args, **kwargs):
@@ -26,7 +29,7 @@ class MemSE(nn.Module):
                  quanter,
                  r: float=1.,
                  Gmax_init_Wmax: bool=False,
-                 input_bias: bool=True,
+                 input_bias: bool=False,
                  input_shape=None,
                  taylor_order: int=2,
                  post_processing=None):
@@ -70,28 +73,23 @@ class MemSE(nn.Module):
     def sigma(self) -> float:
         return self.quanter.std_noise
 
-    def forward(self, x, compute_power: bool = True, output_handle=None):
+    def forward(self, x, compute_power: bool = True, output_handle=None, meminfo: Optional[str] = None):
         self.quant()
         assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
         if self.input_bias:
             x += self.bias[None, :, :, :]
 
-        data = {
-            'mu': x,
-            'gamma_shape': [*x.shape, *x.shape[1:]],
-            'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
-            'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
-            'current_type': None,
-            'compute_power': compute_power,
-            'taylor_order': self.taylor_order,
-            'sigma': self.sigma,
-            'r': self.r
-        }
+        data = self.init_memse_dict(x, compute_power)
+        data['P_tot'].extra_info = 'Power accumulator'
         for idx, s in enumerate(net_param_iterator(self.model)):
             if hasattr(s, 'memse'):
                 s.memse(s, data)
             else:
                 SUPPORTED_OPS.get(type(s), NOOP)(s, data)
+            if meminfo == 'cpu' or meminfo == 'gpu':
+                gc.collect()
+                print('Layer', idx, '(', s, ')')
+                memory_report(False if meminfo == 'cpu' else True, 10)
             self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
             self.post_process_gamma(data['gamma'])
 
@@ -117,8 +115,8 @@ class MemSE(nn.Module):
         self.unquant()
         return out.flatten(start_dim=1)
 
-    def no_power_forward(self, x):
-        return self.forward(x, False)
+    def no_power_forward(self, x, meminfo: Optional[str] = None):
+        return self.forward(x, False, meminfo=meminfo)
 
     def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False, output_handle = None):
         reps = int(reps)
@@ -148,17 +146,7 @@ class MemSE(nn.Module):
         varis = {'sim': {}, 'us': {}}
         covs = {'sim': {}, 'us': {}}
 
-        data = { # TODO this could be managed in a distinct function
-            'mu': x,
-            'gamma_shape': [*x.shape, *x.shape[1:]],
-            'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
-            'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
-            'current_type': None,
-            'compute_power': compute_power,
-            'taylor_order': self.taylor_order,
-            'sigma': self.sigma,
-            'r': self.r
-        }
+        data = self.init_memse_dict(x, compute_power)
         for idx, s in enumerate(net_param_iterator(self.model)):
             SUPPORTED_OPS.get(type(s), NOOP)(s, data)
             if type(s) not in SUPPORTED_OPS:
@@ -197,6 +185,19 @@ class MemSE(nn.Module):
                         self.plot_gamma(us_ - sim_, output_handle, f'{type(s)} US - SIM', idx)
         return mses, means, varis, covs
 
+    def init_memse_dict(self, x: torch.Tensor, compute_power: bool):
+        data = {
+            'mu': x,
+            'gamma_shape': [*x.shape, *x.shape[1:]],
+            'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
+            'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
+            'current_type': None,
+            'compute_power': compute_power,
+            'taylor_order': self.taylor_order,
+            'sigma': self.sigma,
+            'r': self.r
+        }
+        return data
 
     def quant(self, c_one=True):
         self.quanter.quant(c_one=c_one)

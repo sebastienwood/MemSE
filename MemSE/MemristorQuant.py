@@ -1,10 +1,7 @@
 import torch
 import torch.nn as nn
-import numpy as np
-import copy
 from MemSE.definitions import WMAX_MODE
 from MemSE.nn.definitions import TYPES_HANDLED
-from MemSE.nn import Conv2DUF
 from MemSE.utils import default, torchize
 
 from typing import Union
@@ -18,7 +15,11 @@ class CrossBar(object):
 		self.quanted, self.noised, self.c_one = False, False, False
 		existing_k = [k for k in TYPES_HANDLED[type(module)] if hasattr(module, k) and getattr(module, k) is not None]
 		self.tensors = {k:getattr(module,k) for k in existing_k}
+		for k, v in self.tensors.items():
+			v.extra_info = f'QParam {k} of {module.__class__.__name__}'
 		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in existing_k}
+		for k, v in self.saved_tensors.items():
+			v.extra_info = f'QParam (original) {k} of {module.__class__.__name__}'
 		self.intermediate_tensors = {}
 
 		module.register_buffer('Wmax', torch.tensor([0.] * module.out_features))
@@ -100,6 +101,7 @@ class CrossBar(object):
 			self.saved_tensors[k].copy_(true_value.clone().cpu())
 			self._quantize(true_value, N)
 			self.intermediate_tensors[k] = true_value.clone().cpu()
+			self.intermediate_tensors[k].extra_info = f'QParam (cache) {k} of {self.module.__class__.__name__}'
 			self.tensors[k].data.copy_(true_value)
 		self.rescale()
 		self.quanted = True
