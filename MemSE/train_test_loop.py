@@ -1,6 +1,6 @@
 import time
 import torch
-from MemSE.MemSE import MemSE
+from MemSE import MemSE
 
 from MemSE.nn import mse_gamma
 
