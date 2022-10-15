@@ -187,6 +187,10 @@ class MemristorQuant(object):
 	@Gmax.setter
 	def Gmax(self, val):
 		self.init_gmax(val)
+  
+	@property
+	def Wmax(self):
+		return torch.cat([t.Wmax for t in self.crossbars])
 
 	def param_update(self):
 		if self.quanted:
