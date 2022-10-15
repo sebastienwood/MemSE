@@ -27,6 +27,7 @@ class Reshaper(nn.Module):
         else:
             pad_gamma_shape = gamma_shape
             pad_gamma = torch.reshape(gamma, pad_mu.shape + pad_mu.shape[1:])
+        pad_gamma.extra_info = 'Gamma out of reshaper'
         memse_dict['current_type'] = reshaper.__class__.__name__
         memse_dict['mu'] = pad_mu
         memse_dict['gamma'] = pad_gamma

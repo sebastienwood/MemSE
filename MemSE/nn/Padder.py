@@ -32,6 +32,7 @@ class Padder(nn.Module):
             else:
                 padding = padder.padding + padder.padding
             pad_gamma = nn.functional.pad(gamma, padding, value=padder.gamma_value)
+        pad_gamma.extra_info = 'Gamma out of padder'
         memse_dict['current_type'] = 'Padder'
         memse_dict['mu'] = pad_mu
         memse_dict['gamma'] = pad_gamma

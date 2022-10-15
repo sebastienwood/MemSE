@@ -14,7 +14,6 @@ class MemSEAct:
         # TODO work with any input shape
         mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
         original_mu_shape = mu.shape
-        degree_taylor = data['taylor_order']
         if gamma_shape is not None:
             gamma = torch.zeros(*gamma_shape, dtype=mu.dtype, device=mu.device)
             gamma_shape = None
@@ -41,11 +40,11 @@ class MemSEAct:
 
         mu_p, gamma_p = cls.main(module, data, mu, sigma_2, d_mu)
         ga_r = diagonal_replace(ga_view, gamma_p.reshape(*ga_view.diagonal(dim1=1, dim2=2).shape)).view(*ga_r.shape)
-
+        ga_r.extra_info = 'ga_r in memseact'
         data['current_type'] = cls.__type__
         data['mu'] = mu_p
         data['gamma'] = ga_r
-        data['gamma_shape'] = None
+        data['gamma_shape'] = gamma_shape
 
     @staticmethod
     def main(module, data, mu, sigma_2, derivatives=None):

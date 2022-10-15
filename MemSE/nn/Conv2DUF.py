@@ -13,7 +13,7 @@ class Conv2DUF(nn.Module):
     def __init__(self, conv, input_shape, output_shape):
         super().__init__()
         assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
-        self.c = [conv]
+        self.original_conv_weight_shape = conv.weight.shape
         self.output_shape = output_shape
         for k in ['kernel_size', 'padding', 'dilation', 'groups', 'stride', 'output_padding', 'padding_mode', 'in_channels', 'out_channels']:
             setattr(self, k, getattr(conv, k))
@@ -52,7 +52,7 @@ class Conv2DUF(nn.Module):
 
     @property
     def original_weight(self):
-        return self.weight.reshape(self.c[0].weight.shape)
+        return self.weight.reshape(self.original_conv_weight_shape)
 
     @property
     def out_features(self):

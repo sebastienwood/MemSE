@@ -6,7 +6,7 @@ import opt_einsum as oe
 from typing import Optional, List
 
 from MemSE.nn.MemSELayer import MemSELayer
-from .utils import diagonal_replace, energy_vec_batched, padded_mu_gamma
+from .utils import diagonal_replace, energy_vec_batched
 
 
 #@torch.jit.script
@@ -20,7 +20,6 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 	mu_sq = torch.square(mu)
 
 	gg = oe.contract('bij->bi', oe.contract('bij,i->bij', mu_sq.unsqueeze(dim=1).expand((mu.shape[0],G.shape[0],)+mu.shape[1:]), sigma_c_sq)) #1st term
-
 	if gamma_shape is not None and not gamma_only_diag:
 		new_gamma = torch.zeros(gamma_shape[0],G.shape[0],G.shape[0], dtype=mu.dtype, device=mu.device)
 		gamma_shape = None
@@ -57,7 +56,7 @@ def linear_layer_logic(W:torch.Tensor,
 
 	ct = Gmax/Wmax
 	if ct.dim() == 0:
-		ct = ct.repeat(W.shape[0]).to(mu)
+		ct = ct.expand(W.shape[0]).to(mu)
 	sigma_p = sigma / ct
 	sigma_c = sigma * math.sqrt(2) / ct
 
@@ -86,6 +85,8 @@ def linear(linear, data):
 														data['r'],
 														data['gamma_shape'],
 														compute_power=data['compute_power'])
+	x.extra_info = 'Mu out of linear'
+	gamma.extra_info = 'Gamma out of linear'
 	data['P_tot'] += P_tot_i
 	data['current_type'] = 'Linear'
 	data['mu'] = x
