@@ -74,7 +74,7 @@ def memory_usage_cpu(tensor) -> float:
 
 
 def memory_usage_gpu(tensor) -> float:
-    raise RuntimeError('Not implemented')
+    return tensor.storage().size() * tensor.storage().element_size() /1024/1024
 
 
 def memory_usage(tensor) -> float:
