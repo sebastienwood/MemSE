@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 from MemSE.nn import mse_gamma
-from MemSE.network_manipulations import conv_to_fc
 
 DEBUG = False
 torch.manual_seed(0)

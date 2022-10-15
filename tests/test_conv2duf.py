@@ -1,6 +1,6 @@
 import torch
 
-from MemSE.network_manipulations import conv_to_unfolded
+from MemSE.fx.network_manipulations import conv_to_unfolded
 from MemSE.nn import Conv2DUF
 from MemSE import MemristorQuant, MemSE
 torch.manual_seed(0)

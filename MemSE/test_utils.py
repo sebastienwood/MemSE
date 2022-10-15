@@ -8,7 +8,7 @@ from MemSE.nn import Flattener
 from MemSE.dataset import get_dataloader
 from MemSE.definitions import WMAX_MODE
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU, make_small_JohNet
-from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
+from MemSE.fx import conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
 
 DEVICES = ['cpu']
 if torch.cuda.is_available():

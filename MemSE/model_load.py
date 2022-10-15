@@ -3,9 +3,8 @@ import torch
 import numpy as np
 
 from MemSE.definitions import ROOT, WMAX_MODE
-from MemSE.network_manipulations import conv_to_fc, fuse_conv_bn
-from MemSE.MemristorQuant import MemristorQuant
-from MemSE.MemSE import MemSE
+from MemSE.fx import conv_to_fc, fuse_conv_bn
+from MemSE import MemSE, MemristorQuant
 
 from pathlib import Path
 

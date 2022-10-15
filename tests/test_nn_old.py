@@ -3,7 +3,7 @@ import torch.nn as nn
 import pytest
 import time
 from MemSE.models.VGG import smallest_vgg_ReLU
-from MemSE.network_manipulations import conv_to_fc, conv_to_unfolded, fuse_conv_bn
+from MemSE.fx import conv_to_fc, conv_to_unfolded, fuse_conv_bn
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant
 from MemSE.nn.utils import mse_gamma

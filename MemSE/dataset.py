@@ -1,4 +1,3 @@
-from attr import has
 from torchvision import transforms, datasets
 from torch.utils import data
 import torch
