@@ -5,7 +5,8 @@ import opt_einsum as oe
 
 from typing import Optional, List, Tuple, Union
 
-__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_', 'LambdaLayer', 'InspectorLayer']
+
+__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_', 'zero_diag', 'LambdaLayer', 'InspectorLayer']
 
 
 class LambdaLayer(nn.Module):
@@ -50,12 +51,16 @@ def diagonal_replace(tensor, diagonal, backprop:bool=False):
     Returns:
         _type_: _description_
     """
-    diag_ones = torch.ones(diagonal.shape[1:], device=tensor.device)
-    mask = torch.diag(diag_ones).unsqueeze_(0)
-    if backprop:
-        mask *= .99
-    out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
-    return out
+    assert len(diagonal.shape) == 2
+    assert len(tensor.shape) == 3
+    assert tensor.shape[1] == tensor.shape[2]
+    tensor[:, range(tensor.shape[1]), range(tensor.shape[2])] = diagonal
+    # diag_ones = torch.ones(diagonal.shape[1:], device=tensor.device)
+    # mask = torch.diag(diag_ones).unsqueeze_(0)
+    # if backprop:
+    #     mask *= .99
+    # out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
+    return tensor
 
 
 def zero_diag(tensor):
