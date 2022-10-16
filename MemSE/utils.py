@@ -41,7 +41,7 @@ def memory_debug(cuda_profile:bool=True) -> list:
 				storage.add(obj.storage())
 		except:
 			pass
-	return sorted(objs, key=lambda item: memory_usage_cpu(item), reverse=True)
+	return sorted(objs, key=lambda item: memory_usage(item), reverse=True)
 
 
 def memory_report(cuda_profile:bool=True, nth_first:Optional[int]=None) -> None:
