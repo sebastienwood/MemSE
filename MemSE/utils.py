@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import numpy as np
@@ -22,7 +22,7 @@ def print_compare(original, other):
 	assert np.allclose(original, other), 'diff'
 
 
-def n_vars_computation(model: nn.Module) -> tuple[int, int]:
+def n_vars_computation(model: nn.Module) -> Tuple[int, int]:
 	n_vars_column, n_vars_layer = 0, 0
 	for _, module in model.named_modules():
 		if isinstance(module, nn.Linear) or isinstance(module, Conv2DUF):
