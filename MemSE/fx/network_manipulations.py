@@ -69,7 +69,7 @@ def conv_to_memristor(model, input_shape, verbose=True, impl='linear', opmap: di
 
     y = record_shapes(model, x)
 
-    model = replace_op(model, opmap | {nn.Conv2d: op})
+    model = replace_op(model, {**opmap, nn.Conv2d: op})
     if verbose:
         print(f"==> converted Conv2d to {impl}")
         print(model)
