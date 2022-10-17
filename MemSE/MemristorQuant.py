@@ -199,7 +199,7 @@ class MemristorQuant(object):
 			assert res.numel() == len(self.crossbars)
 			return res
 		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
-			return torch.cat([t.Wmax for t in self.crossbars])
+			return [t.Wmax for t in self.crossbars]
 		else:
 			raise ValueError('Not a valid Wmax mode')
 
