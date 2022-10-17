@@ -4,24 +4,27 @@ import requests
 
 
 # ENSURE DIRS ARE CREATED
-Path('./outputs').mkdir(exist_ok=True)
+launcher_path = Path(__file__).parent.resolve()
+output_path = launcher_path / 'outputs'
+output_path.mkdir(exist_ok=True)
 
 # ENSURE DATA IS READY
-Path('../data/').mkdir(exist_ok=True)
+datapath = launcher_path.parent.parent.parent / 'data' 
+datapath.mkdir(exist_ok=True)
 fname = 'cifar-10-python.tar.gz'
 url = 'https://www.cs.toronto.edu/~kriz/' + fname
 r = requests.get(url)
-open(Path(f'../data/{fname}'), 'wb').write(r.content)
-
+open(datapath / fname, 'wb').write(r.content)
 
 # LAUNCH
-with open(r"experiments.dat", 'r') as fp:
+experiments_path = launcher_path / 'experiments.dat'
+with open(experiments_path, 'r') as fp:
     counted = len(fp.readlines())
 cmd = ['sbatch']
 if counted > 1:
     cmd.extend([f'--array=0-{counted - 1}'])
 else:
     cmd.extend([f'--array=0']) # always an array 
-cmd.extend(['run_experiment.sh'])
+cmd.extend([str(launcher_path / 'run_experiment.sh')])
 out = run(cmd, capture_output=True)
 print(out)
