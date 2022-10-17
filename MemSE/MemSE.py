@@ -25,8 +25,8 @@ def NOOP(*args, **kwargs):
 
 class MemSE(nn.Module):
     def __init__(self,
-                 model,
-                 quanter,
+                 model: nn.Module,
+                 quanter: MemristorQuant,
                  r: float=1.,
                  Gmax_init_Wmax: bool=False,
                  input_bias: bool=False,

@@ -187,14 +187,24 @@ class MemristorQuant(object):
 	@Gmax.setter
 	def Gmax(self, val):
 		self.init_gmax(val)
-  
+
 	@property
 	def Wmax(self):
-		return torch.cat([t.Wmax for t in self.crossbars])
+		if self.wmax_mode == WMAX_MODE.ALL:
+			res = torch.cat([t.Wmax for t in self.crossbars]).unique_consecutive()
+			assert res.numel() == 1
+			return res
+		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
+			res = torch.cat([t.Wmax.unique_consecutive() for t in self.crossbars])
+			assert res.numel() == len(self.crossbars)
+			return res
+		elif self.wmax_mode == WMAX_MODE.COLUMNWISE:
+			return torch.cat([t.Wmax for t in self.crossbars])
+		else:
+			raise ValueError('Not a valid Wmax mode')
 
 	def param_update(self):
 		if self.quanted:
-			self.unquant()
 			self.quant(self._last_c_one)
 
 	def __call__(self, input):

@@ -9,13 +9,11 @@ import pytest
 @pytest.mark.parametrize("device", [DEVICES[1]])
 @pytest.mark.parametrize("mode", [WMAX_MODE.ALL, WMAX_MODE.COLUMNWISE, WMAX_MODE.LAYERWISE])
 def test_columnwise(method, device, mode):
-    net = MODELS['johnet']
+    net = MODELS['vgg_features']
     conv2duf, o = get_net_transformed(net, method, inp)
     conv2duf, o = conv2duf, o.to(device)
-    print(conv2duf)
     memse = nn2memse(conv2duf, mode=mode).to(device)
     memse.quanter.quant()
+    print(memse.quanter.Wmax)
     memse.quanter.unquant()
     memse.forward(inp.to(device))
-    # TODO: only testing init right now, should test further
-
