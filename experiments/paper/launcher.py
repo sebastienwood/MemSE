@@ -1,10 +1,12 @@
 from subprocess import run
 from pathlib import Path
 import requests
+import os
 
 
 # ENSURE DIRS ARE CREATED
 launcher_path = Path(__file__).parent.resolve()
+os.chdir(launcher_path)
 output_path = launcher_path / 'outputs'
 output_path.mkdir(exist_ok=True)
 

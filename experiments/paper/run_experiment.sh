@@ -11,7 +11,9 @@
 
 module load StdEnv/2020 python/3.9 cuda cudnn
 
-SOURCEDIR=~/projects/def-franlp/$u/MemSE
+echo "User $u"
+u=${u:-sebwood}
+SOURCEDIR=~/projects/def-franlp/sebwood/MemSE
 
 ###
 # ENV PREPARATION
