@@ -1,1 +1,2 @@
-python3 pytest tests/
+python -m pytest tests/
+python -m pytest --collect-only

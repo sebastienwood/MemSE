@@ -2,13 +2,23 @@ from subprocess import run
 from pathlib import Path
 import requests
 import os
+import subprocess
+import sys
 
+###
+# HOWTO
+# - provide a experiments.dat file in the same directory as launcher.py
+# -- each line is a python cmd with a new experiment
+##
 
 # ENSURE DIRS ARE CREATED
 launcher_path = Path(__file__).parent.resolve()
 os.chdir(launcher_path)
 output_path = launcher_path / 'outputs'
 output_path.mkdir(exist_ok=True)
+install_path = launcher_path / '.installs'
+install_path.mkdir(exist_ok=True)
+subprocess.check_call([sys.executable, '-m', 'pip', 'download', '--no-binary', ':all:', '--no-deps', '-d', str(install_path), '-r', 'noncc_requirements.txt'])
 
 # ENSURE DATA IS READY
 datapath = launcher_path.parent.parent.parent / 'data' 

@@ -5,7 +5,7 @@
 #SBATCH --mail-user=sebastien.henwood@polymtl.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=FAIL
-#SBATCH --output=outputs/%x-%j.out
+#SBATCH --output=outputs/%x-%A-%a.out
 #SBATCH --account=def-franlp
 
 module load StdEnv/2020 python/3.9 cuda cudnn
@@ -14,6 +14,7 @@ u=${u:-sebwood}
 echo "User $u on shell $0"
 SOURCEDIR=~/projects/def-franlp/$u/MemSE
 cd ../..
+echo "$SOURCEDIR"
 echo "$PWD"
 
 #aSBATCH --gres=gpu:1       # Request GPU "generic resources"
@@ -46,6 +47,7 @@ fi
 
 line_to_read=$(($SLURM_ARRAY_TASK_ID+1))
 echo "Line to read = $line_to_read"
-SED_RES=$(sed -n "$line_to_read"p "/experiments/paper/experiments.dat")
+SED_RES=$(sed -n "$line_to_read"p "$SOURCEDIR/experiments/paper/experiments.dat")
 echo "$SED_RES"
-eval "$SED_RES"
+eval $SED_RES
+echo "Done"
