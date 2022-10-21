@@ -4,12 +4,13 @@ import numpy as np
 import pytest
 
 from MemSE.nn import mse_gamma
+from MemSE import METHODS
 
 DEBUG = False
 torch.manual_seed(0)
 #inp = torch.rand(BATCH_SIZE,3,32,32)
 
-from MemSE.test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_net_transformed, nn2memse
+from MemSE.test_utils import INP as inp, DEVICES, MODELS, SIGMA, get_net_transformed, nn2memse
 
 if DEBUG:
     inp = torch.rand(2, 3, 5, 5)

@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import MemSE.nn as nnM
 
+__all__ = ['ROOT', 'WMAX_MODE']
+
 ROOT = Path(__file__).parent.parent
 
 DEFAULT_DEVICE = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')

@@ -1,10 +1,13 @@
+import gc
 import time
+from typing import List, Tuple
 import torch
+from torch.utils import data
 from MemSE import MemSE
 
 from MemSE.nn import mse_gamma
 
-def accuracy(output, target, topk=(1,)):
+def accuracy(output, target, topk=(1,)) -> List[torch.Tensor]:
     """Computes the precision@k for the specified values of k"""
     maxk = max(topk)
     batch_size = target.size(0)
@@ -56,7 +59,7 @@ def test(testloader, model, criterion, device=None, batch_stop:int=-1):
         # measure data loading time
         data_time.update(time.time() - end)
 
-        inputs, targets = inputs.to(device), targets.to(device)
+        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
 
         # compute output
         outputs = model(inputs)
@@ -64,7 +67,7 @@ def test(testloader, model, criterion, device=None, batch_stop:int=-1):
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs.data, targets.data, topk=(1, 5))
- 
+
         losses.update(loss.item(), inputs.size(0))
         top1.update(prec1.item(), inputs.size(0))
         top5.update(prec5.item(), inputs.size(0))
@@ -79,31 +82,86 @@ def test(testloader, model, criterion, device=None, batch_stop:int=-1):
     return (losses.avg, top1.avg)
 
 
-def test_mse_th(testloader, model: MemSE, device=None, batch_stop: int = -1):
+@torch.inference_mode()
+def test_mse_th(testloader: data.DataLoader,
+                model: MemSE,
+                device=None,
+                batch_stop: int = -1,
+                memory_flush:bool=True) -> Tuple[float, float]:
     assert testloader.__output_loader is True
+    model.quant()
     mses, pows = [], []
     for batch_idx, (inputs, targets) in enumerate(testloader):
-        inputs, targets = inputs.to(device), targets.to(device)
-        model.quanter.denoise()
-        mu, gamma, p_tot = model(inputs)
-        pows.extend(p_tot)
-        mse = mse_gamma(targets, mu, gamma)
-        mses.extend(mse)
+        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+        
+        mu, gamma, p_tot = model.forward(inputs, manage_quanter=False)
+        pows.append(p_tot)
+        mse = torch.amax(mse_gamma(targets, mu, gamma), dim=1)
+        mses.append(mse)
+        if memory_flush:
+            gc.collect()
         if batch_stop == batch_idx + 1:
             break
-    return torch.stack(mses), torch.stack(pows)
+    model.unquant()
+    return torch.mean(torch.stack(mses)).item(), torch.mean(torch.stack(pows)).item()
 
 
-def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, trials=100):
+@torch.inference_mode()
+def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, trials:int=100):
+    # TODO this is equiv to MemSE.mse_sim
     assert testloader.__output_loader is True
-    mses = []
+    model.quant(c_one=False)
+    mses = AverageMeter()
     for batch_idx, (inputs, targets) in enumerate(testloader):
-        inputs, targets = inputs.to(device), targets.to(device)
-        out = (model.forward_noisy(inputs).detach() - targets) ** 2
-        for _ in range(trials - 1):
-            out += (model.forward_noisy(inputs).detach() - targets) ** 2
-        out /= trials
-        mses.extend(out.cpu().tolist())
+        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+        
+        for _ in range(trials):
+            outputs = model.forward_noisy(inputs)
+            mse = torch.mean((outputs.detach() - targets) ** 2)
+            mses.update(mse.item(), inputs.size(0))
+
         if batch_stop == batch_idx + 1:
             break
-    return mses
+    model.unquant()
+    return mses.avg
+
+
+@torch.inference_mode()
+def test_acc_sim(testloader, model: MemSE, device=None, batch_stop:int=-1, trials:int=100):
+    assert not hasattr(testloader, '__output_loader')
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    top1 = AverageMeter()
+    top5 = AverageMeter()
+
+    # switch to evaluate mode
+    model.eval()
+    model.quant(c_one=False)
+
+    end = time.time()
+
+    for batch_idx, (inputs, targets) in enumerate(testloader):
+        # measure data loading time
+        data_time.update(time.time() - end)
+
+        inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
+
+        # compute output trials time
+        for _ in range(trials):
+            outputs = model.forward_noisy(inputs)
+
+            # measure accuracy and record loss
+            prec1, prec5 = accuracy(outputs.data, targets.data, topk=(1, 5))
+
+            top1.update(prec1.item(), inputs.size(0))
+            top5.update(prec5.item(), inputs.size(0))
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if batch_stop == batch_idx + 1:
+            break
+    
+    model.unquant()
+    return (top5.avg, top1.avg)

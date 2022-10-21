@@ -11,16 +11,6 @@ from MemSE.dataset import get_output_loader
 from MemSE.definitions import DEFAULT_DEVICE
 from MemSE.train_test_loop import test_mse_th
 
-def im_problem_function_batched(Gmax, args, x, device_id=None, torch_dtype=torch.float32):
-
-
-    model, sigma, r, N, mode = args 
-      
-
-    quanter = MemristorQuant(model, std_noise=sigma, N=N, Gmax=Gmax, wmax_mode=mode)
-
-    memse = MemSE(model, quanter, input_bias=None)
-  
 
 class Parameters:
     def __init__(self) -> None:

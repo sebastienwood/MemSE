@@ -55,11 +55,6 @@ def diagonal_replace(tensor, diagonal, backprop:bool=False):
     assert len(tensor.shape) == 3
     assert tensor.shape[1] == tensor.shape[2]
     tensor[:, range(tensor.shape[1]), range(tensor.shape[2])] = diagonal
-    # diag_ones = torch.ones(diagonal.shape[1:], device=tensor.device)
-    # mask = torch.diag(diag_ones).unsqueeze_(0)
-    # if backprop:
-    #     mask *= .99
-    # out = mask * torch.diag_embed(diagonal) + (1 - mask) * tensor
     return tensor
 
 

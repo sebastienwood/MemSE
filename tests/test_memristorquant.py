@@ -1,8 +1,7 @@
-from MemSE import MemristorQuant
+from MemSE import METHODS
 from MemSE.definitions import WMAX_MODE
-from MemSE.test_utils import INP as inp, DEVICES, MODELS, METHODS, SIGMA, get_net_transformed, nn2memse
+from MemSE.test_utils import INP as inp, DEVICES, MODELS, SIGMA, get_net_transformed, nn2memse
 
-import torch.nn as nn
 import pytest
 
 @pytest.mark.parametrize("method", METHODS.values())

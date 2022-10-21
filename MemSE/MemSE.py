@@ -73,8 +73,9 @@ class MemSE(nn.Module):
     def sigma(self) -> float:
         return self.quanter.std_noise
 
-    def forward(self, x, compute_power: bool = True, output_handle=None, meminfo: Optional[str] = None):
-        self.quant()
+    def forward(self, x, compute_power: bool = True, output_handle=None, meminfo: Optional[str] = None, manage_quanter: bool = True):
+        if manage_quanter:
+            self.quant()
         assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
         if self.input_bias:
             x += self.bias[None, :, :, :]
@@ -99,11 +100,13 @@ class MemSE(nn.Module):
             data['gamma'] = torch.zeros(data['gamma_shape'])
         if len(data['gamma'].shape) != 3:
             data['gamma'] = data['gamma'].reshape(data['gamma'].shape[0], data['mu'].shape[1], data['mu'].shape[1])
-            
-        self.unquant()
+        
+        if manage_quanter:
+            self.unquant()
         return data['mu'], data['gamma'], data['P_tot']
 
     def mse_sim(self, x, tar, reps: int = 1000):
+        # TODO replace with calls to train_test_loop.test_mse_sim
         reps = int(reps)
         if self.input_bias:
             x += self.bias[None, :, :, :]
@@ -211,6 +214,7 @@ class MemSE(nn.Module):
 
     @torch.no_grad()
     def forward_noisy(self, x):
+        # TODO self.bias is not applied / is not tracked by the quanter
         self.quanter.renoise()
         return self.model(x)
 

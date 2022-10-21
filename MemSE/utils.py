@@ -106,3 +106,7 @@ def listify(val):
 		return val
 	else:
 		return [val]
+
+def numpify(val: torch.Tensor):
+    assert isinstance(val, torch.Tensor)
+    return val.detach().cpu().numpy()

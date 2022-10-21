@@ -1,10 +1,11 @@
 tensorly
-numpy
 torch
 torchvision
 torchtyping
 scipy
 opt_einsum
+
+pymoo
 
 matplotlib
 tqdm

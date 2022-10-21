@@ -14,7 +14,7 @@ from typing import Union
 ROOT_PRETRAINED = f'{ROOT}/MemSE/pretrained'
 
 
-def load_model(name: str, num_classes: int, input_shape, save_name=None, fuse: bool=True, cast_to_memristor: bool=True, **kwargs):
+def load_model(name: str, num_classes: int, save_name=None, fuse: bool=True, **kwargs):
     """Load a Pytorch model with pretrained weight (if they exist), while fusing and casting operations to a Memristor friendly equivalent op.
 
     Args:
@@ -45,8 +45,6 @@ def load_model(name: str, num_classes: int, input_shape, save_name=None, fuse: b
     model.eval()
     if fuse:
         model = fuse_conv_bn(model, name)
-    if cast_to_memristor:  # TODO option for conv2duf
-        model = conv_to_fc(model, input_shape)
     return model
 
 

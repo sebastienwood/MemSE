@@ -6,16 +6,16 @@ import numpy as np
 from MemSE import MemristorQuant, MemSE
 from MemSE.nn import Flattener
 from MemSE.dataset import get_dataloader
-from MemSE.definitions import WMAX_MODE
+from MemSE.definitions import WMAX_MODE, ROOT
 from MemSE.models import smallest_vgg, resnet18, smallest_vgg_ReLU, make_small_JohNet
-from MemSE.fx import conv_to_fc, conv_to_unfolded, record_shapes, fuse_conv_bn
+from MemSE.fx import record_shapes, fuse_conv_bn
 
 DEVICES = ['cpu']
 if torch.cuda.is_available():
     DEVICES.append('cuda')
 
 BATCH_SIZE = 2
-_, _, test_loader, _, _ = get_dataloader('cifar10', root='./data', bs=BATCH_SIZE)
+_, _, test_loader, _, _ = get_dataloader('cifar10', root=f'{ROOT}/data', bs=BATCH_SIZE)
 INP = next(iter(test_loader))[0]
 
 
@@ -33,11 +33,6 @@ MODELS = {
     'vgg_features': smallest_vgg_ReLU(features_only=True),
     'resnet': fuse_conv_bn(resnet18().eval(), 'resnet18'),
     'johnet': fuse_conv_bn(make_small_JohNet().eval(), 'make_johnet'),
-}
-
-METHODS = {
-    'unfolded': conv_to_unfolded,
-    'fc': conv_to_fc
 }
 
 

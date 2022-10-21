@@ -48,6 +48,6 @@ fi
 line_to_read=$(($SLURM_ARRAY_TASK_ID+1))
 echo "Line to read = $line_to_read"
 SED_RES=$(sed -n "$line_to_read"p "$SOURCEDIR/experiments/paper/experiments.dat")
-echo "$SED_RES"
+echo "${SED_RES} --datapath ${datapath}"
 eval $SED_RES
 echo "Done"

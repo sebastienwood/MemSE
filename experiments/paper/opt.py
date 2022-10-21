@@ -1,0 +1,238 @@
+from argparse import ArgumentParser
+from functools import partial
+from pathlib import Path
+import copy
+import time
+import torch
+import time
+import numpy as np
+from MemSE.nn import *
+from MemSE import MemSE, MemristorQuant, ROOT, METHODS
+from MemSE.utils import n_vars_computation, numpify
+from MemSE.dataset import batch_size_opt, get_dataloader, get_output_loader
+from MemSE.model_loader import load_model
+from MemSE.train_test_loop import test_acc_sim, test_mse_th
+
+from pymoo.algorithms.soo.nonconvex.ga import GA
+from pymoo.core.problem import Problem
+
+import logging;
+logger = logging.getLogger("numba")
+logger.setLevel(logging.ERROR)
+
+torch.manual_seed(0)
+OPTI_BS = 10
+
+#####
+# ARGUMENTS HANDLING
+#####
+def parse_args():
+	parser = ArgumentParser(description='Gmax optimizer')
+	parser.add_argument('--device', '-D', default='cuda', type=str)
+	parser.add_argument('--power-budget', '-P', default=1e6, type=int, dest='power_budget')
+	parser.add_argument('--memscale', action='store_true')
+	parser.add_argument('--network', default='smallest_vgg_ReLU', type=str)
+	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
+	parser.add_argument('--method', default='unfolded', type=str)
+	parser.add_argument('-R', default=1, type=int)
+	parser.add_argument('--N-mc', default=20, type=int, dest='N_mc')
+	parser.add_argument('--sigma', '-S', default=0.01, type=float)
+	parser.add_argument('-N', default=1280000000, type=int)
+	parser.add_argument('--batch-stop', default=2, type=int)
+	return parser.parse_args()
+
+args = parse_args()
+test_acc_sim = partial(test_acc_sim, batch_stop=args.batch_stop)
+test_mse_th = partial(test_mse_th, batch_stop=args.batch_stop)
+
+#####
+# BOOKEEPING SETUP
+#####
+folder = Path(__file__).parent
+result_folder = folder / 'results'
+result_folder.mkdir(exist_ok=True)
+fname = f'opti_{args.method}_{args.network}_{args.power_budget}.z'
+result_filename = result_folder / fname
+
+
+#####
+# MODEL LOAD
+#####
+bs = 128
+train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_dataloader('cifar10', root=args.datapath, bs=bs, memscale=args.memscale, train_set_clean_sample_per_classes=1)
+model = load_model(args.network, nclasses)
+model = METHODS[args.method](model, input_shape)
+
+nvar_col, nvar_layer = n_vars_computation(model)
+print(f'In column mode, the model have {nvar_col} variables, and {nvar_layer} in layer mode')
+
+quanter = MemristorQuant(model, std_noise=args.sigma, N=args.N)
+memse = MemSE(model, quanter).to(args.device)
+
+opti_bs = batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=args.device)
+print(f'The maximum batch size was found to be {opti_bs}')
+
+output_train_loader = get_output_loader(train_clean_loader, model, device=args.device, overwrite_bs=opti_bs)
+small_test_loader = get_output_loader(test_loader, model, device=args.device, overwrite_bs=opti_bs)
+
+#####
+# OPTIMIZER UTILITIES
+####
+class problemClass(Problem):
+	def __init__(self,
+                 n_var,
+                 n_obj,
+                 n_constr,
+                 xl,
+                 xu,
+                 memse,
+                 power_budget,
+                 dataloader,
+                 device):
+		super().__init__(n_var=n_var, n_obj=n_obj, n_constr=n_constr, xl=xl, xu=xu)
+		self.memse = memse
+		self.power_budget = power_budget
+		self.device = device
+		self.dataloader = dataloader
+
+	def _evaluate(self, Gmax, out, *args, **kwargs):
+		a = []
+		for G  in Gmax:
+			self.memse.quanter.Gmax = G
+			P, mse = test_mse_th(self.dataloader, self.memse, self.device)
+			a.append([P, mse])
+
+		a = np.array(a)
+		out["F"] =  np.stack(a[:,1]) 
+		out["G"] = np.stack(a[:,0]-self.power_budget)
+
+
+def genetic_alg(memse:MemSE,
+                n_vars:int,
+                dataloader,
+				nb_gen:int=1,
+                pop_size:int=100,
+                power_budget:int=1000000,
+                start_Gmax = None,
+                device = torch.device('cpu')):
+
+	problem = problemClass(n_vars,
+						   1,
+                           1,
+                           np.ones(n_vars)*0.01,
+                           np.ones(n_vars)*500,
+                           memse,
+                           power_budget,
+                           dataloader,
+                           device=device)
+
+	if np.any(start_Gmax) == None: 
+		sample_process = np.ones((pop_size,n_vars)) + np.random.normal(0,0.5,(pop_size,n_vars))
+	else:
+		sample_process = np.ones((pop_size,n_vars)) * start_Gmax + np.random.normal(0,0.001,(pop_size,n_vars))
+	
+	algorithm = GA(pop_size=pop_size,
+					eliminate_duplicates=True,
+					sampling=np.clip(sample_process,0.01,500))
+
+
+	# perform a copy of the algorithm to ensure reproducibility
+	obj = copy.deepcopy(algorithm)
+
+	# let the algorithm know what problem we are intending to solve and provide other attributes
+	obj.setup(problem, termination=("n_gen", nb_gen),)
+
+	# until the termination criterion has not been met
+	while obj.has_next():
+	
+		# perform an iteration of the algorithm
+		t1 = time.time()
+		obj.next()
+		t2 = time.time()
+		print(t2-t1)
+
+		# access the algorithm to print some intermediate outputs
+		print(f"gen: {obj.n_gen} max gen: {obj.termination.n_max_gen} n_nds: {len(obj.opt)} constr: {obj.opt.get('CV')[0,0]} ideal: {obj.opt.get('F')[0,0]} power: {obj.opt.get('G')[0,0]+power_budget}")
+		print(obj.opt.get('X'),np.min(obj.opt.get('X')),np.max(obj.opt.get('X')))
+		# print(im_problem_function_batched(obj.opt.get('X')[0], args, x, z, device_id=0))
+
+		# if obj.n_gen%50 == 0:
+			# np.save("checkpoint_opti_algo_"+str(power_budget)+type_opt+'.npy', obj)
+			# np.save('checkpoint_gmax_opti_'+type_opt+'_'+str(power_budget)+'.npy', obj.opt.get('X'))
+
+	
+	# finally obtain the result object
+	res = obj.result()
+	if np.all(res.X!=None):
+		P_tot, mse =  res.G + power_budget, res.F#im_problem_function_batched(res.X, args, x, device_id=device_id)
+		minmax_power_tab = P_tot
+		minmax_mse_tab = mse
+	else:
+		minmax_power_tab = np.nan #res.G+power_budget
+		minmax_mse_tab = np.nan
+	return minmax_power_tab, minmax_mse_tab, res.X
+
+
+#####
+# RUN OPT.
+#####
+MODES_INIT = {
+	'ALL': 1,
+	'LAYERWISE': nvar_layer,
+	'COLUMNWISE': nvar_col
+}
+
+RES_WMAX = {}
+RES_P = {}
+RES_GMAX = {}
+RES_MSE = {}
+
+for mode in MODES_INIT.keys():
+	memse.quanter.init_wmax(mode)
+	memse.quanter.init_gmax(1.)  # automatically extend to mode-size
+
+	RES_WMAX[mode] = memse.quanter.Wmax
+
+	if mode == 'LAYERWISE':
+		start_Gmax = RES_GMAX['ALL'] * numpify(RES_WMAX['LAYERWISE']) / RES_WMAX['ALL'].item()
+	elif mode == 'COLUMNWISE':
+		start_Gmax = np.concatenate([RES_GMAX['LAYERWISE'][i].item() * numpify(RES_WMAX['COLUMNWISE'][i]) / RES_WMAX['LAYERWISE'][i].item() for i in range(len(RES_WMAX['COLUMNWISE']))])
+	else:
+		start_Gmax = None
+
+	P_all, mse_all, Gmax_tab_all = genetic_alg(memse,
+                                            n_vars=MODES_INIT[mode],
+                                            dataloader=output_train_loader,
+											nb_gen=1,
+											pop_size=20,
+											power_budget=args.power_budget,
+											device=args.device,
+											start_Gmax=start_Gmax)
+
+	RES_GMAX[mode] = Gmax_tab_all
+	RES_MSE[mode] = mse_all
+	RES_P[mode] = P_all
+
+
+print(RES_P)
+print(RES_MSE)
+
+
+#####
+# POWER/ACC RESULTS
+#####
+RES_ACC = {}
+RES_POW = {}
+for mode, Gmax in RES_GMAX.items():
+    if np.any(Gmax) == None:
+        print(f'A Gmax in {mode=} was NaN')
+        continue
+    memse.quanter.init_wmax(mode)
+    memse.quanter.init_gmax(Gmax)
+    _, acc = test_acc_sim(test_loader, memse, device=args.device, trials=args.N_mc)
+    _, pows = test_mse_th(small_test_loader, memse, device=args.device)
+    RES_ACC[mode] = acc
+    RES_POW[mode] = pows
+
+torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
+
