@@ -38,12 +38,19 @@ def parse_args():
 	parser.add_argument('--N-mc', default=20, type=int, dest='N_mc')
 	parser.add_argument('--sigma', '-S', default=0.01, type=float)
 	parser.add_argument('-N', default=1280000000, type=int)
-	parser.add_argument('--batch-stop', default=2, type=int)
+
+	parser.add_argument('--batch-stop-accuracy', default=2, type=int, help='Set it to -1 to run all avail. batches')
+	parser.add_argument('--batch-stop-power', default=2, type=int, help='Set it to -1 to run all avail. batches')
+	parser.add_argument('--batch-stop-opt', default=2, type=int, help='Set it to -1 to run all avail. batches')
+
+	parser.add_argument('--gen-all', default=1, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
+	parser.add_argument('--gen-layer', default=5, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
+	parser.add_argument('--gen-col', default=10, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
 	return parser.parse_args()
 
 args = parse_args()
-test_acc_sim = partial(test_acc_sim, batch_stop=args.batch_stop)
-test_mse_th = partial(test_mse_th, batch_stop=args.batch_stop)
+test_acc_sim = partial(test_acc_sim, device=args.device)
+test_mse_th = partial(test_mse_th, device=args.device)
 
 #####
 # BOOKEEPING SETUP
@@ -75,6 +82,17 @@ print(f'The maximum batch size was found to be {opti_bs}')
 output_train_loader = get_output_loader(train_clean_loader, model, device=args.device, overwrite_bs=opti_bs)
 small_test_loader = get_output_loader(test_loader, model, device=args.device, overwrite_bs=opti_bs)
 
+MODES_INIT = {
+	'ALL': 1,
+	'LAYERWISE': nvar_layer,
+	'COLUMNWISE': nvar_col
+}
+MODES_GEN = {
+	'ALL': args.gen_all,
+	'LAYERWISE': args.gen_layer,
+	'COLUMNWISE': args.gen_col,
+}
+
 #####
 # OPTIMIZER UTILITIES
 ####
@@ -88,18 +106,18 @@ class problemClass(Problem):
                  memse,
                  power_budget,
                  dataloader,
-                 device):
+                 batch_stop: int = -1):
 		super().__init__(n_var=n_var, n_obj=n_obj, n_constr=n_constr, xl=xl, xu=xu)
 		self.memse = memse
 		self.power_budget = power_budget
-		self.device = device
+		self.batch_stop = batch_stop
 		self.dataloader = dataloader
 
 	def _evaluate(self, Gmax, out, *args, **kwargs):
 		a = []
 		for G  in Gmax:
 			self.memse.quanter.Gmax = G
-			P, mse = test_mse_th(self.dataloader, self.memse, self.device)
+			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop)
 			a.append([P, mse])
 
 		a = np.array(a)
@@ -114,7 +132,8 @@ def genetic_alg(memse:MemSE,
                 pop_size:int=100,
                 power_budget:int=1000000,
                 start_Gmax = None,
-                device = torch.device('cpu')):
+                device = torch.device('cpu'),
+                batch_stop: int = -1):
 
 	problem = problemClass(n_vars,
 						   1,
@@ -124,7 +143,7 @@ def genetic_alg(memse:MemSE,
                            memse,
                            power_budget,
                            dataloader,
-                           device=device)
+                           batch_stop=batch_stop)
 
 	if np.any(start_Gmax) == None: 
 		sample_process = np.ones((pop_size,n_vars)) + np.random.normal(0,0.5,(pop_size,n_vars))
@@ -176,12 +195,6 @@ def genetic_alg(memse:MemSE,
 #####
 # RUN OPT.
 #####
-MODES_INIT = {
-	'ALL': 1,
-	'LAYERWISE': nvar_layer,
-	'COLUMNWISE': nvar_col
-}
-
 RES_WMAX = {}
 RES_P = {}
 RES_GMAX = {}
@@ -200,14 +213,18 @@ for mode in MODES_INIT.keys():
 	else:
 		start_Gmax = None
 
+	print(mode)
+	print(f'{start_Gmax=}')
+
 	P_all, mse_all, Gmax_tab_all = genetic_alg(memse,
                                             n_vars=MODES_INIT[mode],
                                             dataloader=output_train_loader,
-											nb_gen=1,
+											nb_gen=MODES_GEN[mode],
 											pop_size=20,
 											power_budget=args.power_budget,
 											device=args.device,
-											start_Gmax=start_Gmax)
+											start_Gmax=start_Gmax,
+											batch_stop=args.batch_stop_opt)
 
 	RES_GMAX[mode] = Gmax_tab_all
 	RES_MSE[mode] = mse_all
@@ -229,8 +246,8 @@ for mode, Gmax in RES_GMAX.items():
         continue
     memse.quanter.init_wmax(mode)
     memse.quanter.init_gmax(Gmax)
-    _, acc = test_acc_sim(test_loader, memse, device=args.device, trials=args.N_mc)
-    _, pows = test_mse_th(small_test_loader, memse, device=args.device)
+    _, acc = test_acc_sim(test_loader, memse, trials=args.N_mc, batch_stop=args.batch_stop_accuracy)
+    _, pows = test_mse_th(small_test_loader, memse, batch_stop=args.batch_stop_power)
     RES_ACC[mode] = acc
     RES_POW[mode] = pows
 
