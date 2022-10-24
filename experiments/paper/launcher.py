@@ -18,7 +18,14 @@ output_path = launcher_path / 'outputs'
 output_path.mkdir(exist_ok=True)
 install_path = launcher_path / '.installs'
 install_path.mkdir(exist_ok=True)
-subprocess.check_call([sys.executable, '-m', 'pip', 'download', '--no-binary', ':all:', '--no-deps', '-d', str(install_path), '-r', 'noncc_requirements.txt'])
+to_install = []
+noncc = open('noncc_requirements.txt', 'r')
+for line in noncc:
+    if not list(install_path.glob(f'{line.strip()}-*.tar.gz')):
+        print(f'{line.strip()} not found on system')
+        to_install.append(line)
+if len(to_install) > 0:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'download', '--no-binary', ':all:', '--no-deps', '-d', str(install_path)] + to_install)
 
 # ENSURE DATA IS READY
 datapath = launcher_path.parent.parent.parent / 'data' 
