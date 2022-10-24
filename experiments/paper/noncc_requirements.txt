@@ -1,3 +1,4 @@
 tensorly
 torchtyping
 typeguard
+pymoo
