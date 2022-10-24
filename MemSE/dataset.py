@@ -135,6 +135,7 @@ def get_output_loader(dataloader,
 
 
 # Based on PLightning
+@torch.inference_mode()
 def batch_size_opt(dataloader,
                    model,
                    new_size: int,

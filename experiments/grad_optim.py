@@ -3,9 +3,9 @@ import torch.nn as nn
 import numpy as np
 from MemSE.train_test_loop import test
 from MemSE.utils import count_parameters
-from MemSE.model_load import load_model
+from MemSE.model_loader import load_model
 from MemSE.dataset import get_dataloader
-from MemSE.network_manipulations import conv_to_fc, conv_decomposition
+from MemSE.fx.network_manipulations import conv_to_fc, conv_decomposition
 
 device = torch.device('cpu')
 
