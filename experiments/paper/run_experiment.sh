@@ -26,7 +26,7 @@ echo "$PWD"
 ###
 python3 -m venv $SLURM_TMPDIR/env
 source $SLURM_TMPDIR/env/bin/activate
-pip install --no-index --upgrade pip pytest pytest-cov torch torchvision
+pip install --no-index --upgrade pip
 pip install --no-index -r $SOURCEDIR/requirements.txt --find-links "$SOURCEDIR"/experiments/paper/.installs/
 datapath=$SLURM_TMPDIR/data
 mkdir $datapath
