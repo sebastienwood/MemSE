@@ -149,13 +149,12 @@ class MemristorQuant(object):
 		self.noised = False
 		self.N = N
 		self.std_noise = std_noise
-		self.init_wmax(wmax_mode)
 		Gmax = default(Gmax, 0.1)
 		self.crossbars = []
 		for m in model.modules():
 			if type(m) in TYPES_HANDLED.keys():
 				self.crossbars.append(CrossBar(m))
-		self.update_w_max()
+		self.init_wmax(wmax_mode)
 		self.init_gmax(Gmax)
 
 	def broadcast(self, fx: str, *args, **kwargs):
@@ -254,6 +253,7 @@ class MemristorQuant(object):
 		if isinstance(wmax_mode, str):
 				wmax_mode = WMAX_MODE[wmax_mode.upper()]
 		self.wmax_mode = wmax_mode
+		self.update_w_max()
 		self.param_update()
 
 	@staticmethod
