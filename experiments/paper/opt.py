@@ -8,7 +8,7 @@ import time
 import numpy as np
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant, ROOT, METHODS
-from MemSE.utils import n_vars_computation, numpify
+from MemSE.utils import n_vars_computation, numpify, default
 from MemSE.dataset import batch_size_opt, get_dataloader, get_output_loader
 from MemSE.model_loader import load_model
 from MemSE.train_test_loop import test_acc_sim, test_mse_th
@@ -16,7 +16,7 @@ from MemSE.train_test_loop import test_acc_sim, test_mse_th
 from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.core.problem import Problem
 
-import logging;
+import logging
 logger = logging.getLogger("numba")
 logger.setLevel(logging.ERROR)
 
@@ -49,8 +49,10 @@ def parse_args():
 	return parser.parse_args()
 
 args = parse_args()
-test_acc_sim = partial(test_acc_sim, device=args.device)
-test_mse_th = partial(test_mse_th, device=args.device)
+device = args.device if torch.cuda.is_available() else 'cpu'
+test_acc_sim = partial(test_acc_sim, device=device)
+test_mse_th = partial(test_mse_th, device=device)
+starting_time = time.time()
 
 #####
 # BOOKEEPING SETUP
@@ -74,13 +76,13 @@ nvar_col, nvar_layer = n_vars_computation(model)
 print(f'In column mode, the model have {nvar_col} variables, and {nvar_layer} in layer mode')
 
 quanter = MemristorQuant(model, std_noise=args.sigma, N=args.N)
-memse = MemSE(model, quanter).to(args.device)
+memse = MemSE(model, quanter).to(device)
 
-opti_bs = batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=args.device)
+opti_bs = 5 #batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=device)
 print(f'The maximum batch size was found to be {opti_bs}')
 
-output_train_loader = get_output_loader(train_clean_loader, model, device=args.device, overwrite_bs=opti_bs)
-small_test_loader = get_output_loader(test_loader, model, device=args.device, overwrite_bs=opti_bs)
+output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
+small_test_loader = get_output_loader(test_loader, model, device=device, overwrite_bs=opti_bs)
 
 MODES_INIT = {
 	'ALL': 1,
@@ -207,7 +209,7 @@ for mode in MODES_INIT.keys():
 	RES_WMAX[mode] = memse.quanter.Wmax
 
 	if mode == 'LAYERWISE':
-		start_Gmax = RES_GMAX['ALL'] * numpify(RES_WMAX['LAYERWISE']) / RES_WMAX['ALL'].item()
+		start_Gmax = default(RES_GMAX['ALL'], 1.) * numpify(RES_WMAX['LAYERWISE']) / RES_WMAX['ALL'].item()
 	elif mode == 'COLUMNWISE':
 		start_Gmax = np.concatenate([RES_GMAX['LAYERWISE'][i].item() * numpify(RES_WMAX['COLUMNWISE'][i]) / RES_WMAX['LAYERWISE'][i].item() for i in range(len(RES_WMAX['COLUMNWISE']))])
 	else:
@@ -222,7 +224,7 @@ for mode in MODES_INIT.keys():
 											nb_gen=MODES_GEN[mode],
 											pop_size=20,
 											power_budget=args.power_budget,
-											device=args.device,
+											device=device,
 											start_Gmax=start_Gmax,
 											batch_stop=args.batch_stop_opt)
 
@@ -252,4 +254,4 @@ for mode, Gmax in RES_GMAX.items():
     RES_POW[mode] = pows
 
 torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
-
+print(f'opt.py ran in {(time.time() - starting_time)/60} minutes')
