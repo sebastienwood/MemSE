@@ -2,9 +2,5 @@
 [] meta-heuristic per layer @sebastienwood
 [] optimize double_conv @sebastienwood
 [] small benchmark suite @sebastienwood
-[] MSE_forward for conv_to_fc layer @sebastienwood
 [] ffcv for dataloaders @sebastienwood
-[] energy eq @sebastienwood
-[] rework ops dispatch -> include noops such as view/pad automatically / give linear its own class to stop messing with __
-[] rework linear converter -> fuse bias
-[] dataset.py memscale in a nice way
+[] utils consolidation
