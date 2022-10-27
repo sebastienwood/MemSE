@@ -117,7 +117,7 @@ class problemClass(Problem):
 		a = []
 		for G  in Gmax:
 			self.memse.quanter.Gmax = G
-			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop)
+			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop, memory_flush=False)
 			a.append([P, mse])
 
 		a = np.array(a)
