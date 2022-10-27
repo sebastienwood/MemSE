@@ -103,7 +103,7 @@ def test_mse_th(testloader: data.DataLoader,
         if batch_stop == batch_idx + 1:
             break
     model.unquant()
-    return torch.mean(torch.stack(mses)).item(), torch.mean(torch.stack(pows)).item()
+    return torch.mean(torch.cat(mses)).item(), torch.mean(torch.cat(pows)).item()
 
 
 @torch.inference_mode()
