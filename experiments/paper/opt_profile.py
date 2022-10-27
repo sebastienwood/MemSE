@@ -52,8 +52,7 @@ def parse_args():
 args = parse_args()
 device = args.device if torch.cuda.is_available() else 'cpu'
 test_acc_sim = partial(test_acc_sim, device=device)
-test_mse_th = partial(test_mse_th, device=device)
-starting_time = time.time()
+test_mse_th = partial(test_mse_th, device=device, memory_flush=False)
 
 #####
 # BOOKEEPING SETUP
@@ -79,7 +78,7 @@ print(f'In column mode, the model have {nvar_col} variables, and {nvar_layer} in
 quanter = MemristorQuant(model, std_noise=args.sigma, N=args.N)
 memse = MemSE(model, quanter).to(device)
 
-opti_bs = 7 #batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=device)
+opti_bs = 5 #batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=device)
 print(f'The maximum batch size was found to be {opti_bs}')
 
 output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
@@ -120,7 +119,7 @@ class problemClass(Problem):
 		a = []
 		for G  in Gmax:
 			self.memse.quanter.Gmax = G
-			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop, memory_flush=False)
+			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop)
 			a.append([P, mse])
 
 		a = np.array(a)
@@ -203,7 +202,7 @@ RES_P = {}
 RES_GMAX = {}
 RES_MSE = {}
 
-for mode in MODES_INIT.keys():
+for mode in ['ALL']:
 	memse.quanter.init_wmax(mode)
 	memse.quanter.init_gmax(1.)  # automatically extend to mode-size
 
@@ -219,6 +218,7 @@ for mode in MODES_INIT.keys():
 	print(mode)
 	print(f'{start_Gmax=}')
 
+	starting_time = time.time()
 	P_all, mse_all, Gmax_tab_all = genetic_alg(memse,
                                             n_vars=MODES_INIT[mode],
                                             dataloader=output_train_loader,
@@ -228,6 +228,7 @@ for mode in MODES_INIT.keys():
 											device=device,
 											start_Gmax=start_Gmax,
 											batch_stop=args.batch_stop_opt)
+	print(f'genetic alg ran in {(time.time() - starting_time)/60} minutes on {args.network} with {MODES_GEN[mode]} generations of {args.ga_popsize} individuals ({opti_bs=})')
 
 	RES_GMAX[mode] = Gmax_tab_all
 	RES_MSE[mode] = mse_all
@@ -237,22 +238,3 @@ for mode in MODES_INIT.keys():
 print(RES_P)
 print(RES_MSE)
 
-
-#####
-# POWER/ACC RESULTS
-#####
-RES_ACC = {}
-RES_POW = {}
-for mode, Gmax in RES_GMAX.items():
-    if np.any(Gmax) == None:
-        print(f'A Gmax in {mode=} was NaN')
-        continue
-    memse.quanter.init_wmax(mode)
-    memse.quanter.init_gmax(Gmax)
-    _, acc = test_acc_sim(test_loader, memse, trials=args.N_mc, batch_stop=args.batch_stop_accuracy)
-    _, pows = test_mse_th(small_test_loader, memse, batch_stop=args.batch_stop_power)
-    RES_ACC[mode] = acc
-    RES_POW[mode] = pows
-
-torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
-print(f'opt.py ran in {(time.time() - starting_time)/60} minutes')

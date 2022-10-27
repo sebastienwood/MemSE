@@ -1,2 +1,1 @@
-python -m pytest tests/
-python -m pytest --collect-only
+python experiments/paper/opt.py --network make_JohNet

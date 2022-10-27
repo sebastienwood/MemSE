@@ -1,4 +1,0 @@
-tensorly
-torchtyping
-typeguard
-pymoo
