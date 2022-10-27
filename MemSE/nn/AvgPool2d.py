@@ -1,16 +1,7 @@
 import torch
 import math
 from typing import Optional, List, Tuple, Union
-from MemSE.misc.has_lib import has_triton
 
-# if has_triton():
-#     from .op.conv2d_triton import conv as conv
-# else:
-#     conv = torch.nn.functional.conv2d
-    
-# TODO using triton conv2d, reduce filter size to 1
-# TODO use float16
-# TODO see for merge in double_conv
 
 @torch.jit.script
 def avgPool2d_layer_vec_gamma_batched(gamma, kernel_size:int=2, stride:int=2, padding:int=0):
