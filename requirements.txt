@@ -4,6 +4,7 @@ torchvision
 torchtyping
 scipy
 opt_einsum
+triton
 
 pymoo
 
