@@ -26,17 +26,11 @@ class InspectorLayer(nn.Module):
         return x
 
 
-def mse_gamma(tar, mu, gamma, verbose: bool = False):
+def mse_gamma(tar, mu, gamma):
     if len(tar.shape) != len(mu.shape):
         tar = tar.reshape_as(mu)
     vari = torch.diagonal(gamma, dim1=1, dim2=2)
     exp = torch.square(mu - tar)
-    if verbose:
-        res_v = vari.mean(dim=1).abs()
-        res_e = exp.mean(dim=1).abs()
-        tot = res_v + res_e
-        print(f'VAR IMPORTANCE {res_v / tot}')
-        print(f'EXP IMPORTANCE {res_e / tot}')
     return exp + vari
 
 
@@ -124,9 +118,9 @@ def energy_vec_batched(c, G, gamma:torch.Tensor, mu, new_gamma_pos_diag:torch.Te
 @torch.jit.script
 def double_conv(tensor: torch.Tensor,
                 weight: torch.Tensor,
-                stride: List[int] = (1, 1),
-                padding: List[int] = (1, 1),
-                dilation: List[int] = (1, 1),
+                stride: Tuple[int, int] = (1, 1),
+                padding: Tuple[int, int] = (1, 1),
+                dilation: Tuple[int, int] = (1, 1),
                 groups: int = 1,
                 ):
     '''A doubly convolution for tensor of shape [bijkijk]'''
