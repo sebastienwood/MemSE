@@ -117,7 +117,6 @@ def test_mse_th(testloader: data.DataLoader,
                 memory_flush:bool=True,
                 print_freq:Optional[int]=None) -> Tuple[float, float]:
     assert testloader.__output_loader is True
-    print_freq = len(testloader) + 1 if print_freq is None else print_freq
     data_time = AverageMeter('Data time', ':6.3f')
     model_time = AverageMeter('Model time', ':6.3f')
     post_time = AverageMeter('Post time', ':6.3f')
@@ -139,9 +138,9 @@ def test_mse_th(testloader: data.DataLoader,
         model_time.update(time.time() - end_)
         end_ = time.time()
         
-        pows.update(p_tot.sum().item(), inputs.size(0))
+        pows.update(p_tot.mean().item(), inputs.size(0))
         mse = torch.amax(mse_gamma(targets, mu, gamma), dim=1)
-        mses.update(mse.sum().item(), inputs.size(0))
+        mses.update(mse.mean().item(), inputs.size(0))
         if memory_flush:
             gc.collect()
         if batch_stop == batch_idx + 1:
@@ -150,7 +149,7 @@ def test_mse_th(testloader: data.DataLoader,
         
         batch_time.update(time.time() - end)
         end = time.time()
-        if batch_idx % print_freq == 0:
+        if print_freq is not None and batch_idx % print_freq == 0:
             progress.display(batch_idx)
     model.unquant()
     return mses.avg, pows.avg
