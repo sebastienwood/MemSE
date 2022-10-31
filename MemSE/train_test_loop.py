@@ -6,8 +6,9 @@ from torch.utils import data
 from MemSE import MemSE
 
 from MemSE.nn import mse_gamma
+from MemSE.misc import AverageMeter, ProgressMeter
 
-        
+
 def accuracy(output, target, topk=(1,)) -> List[torch.Tensor]:
     """Computes the accuracy over the k top predictions for the specified values of k"""
     with torch.no_grad():
@@ -23,49 +24,6 @@ def accuracy(output, target, topk=(1,)) -> List[torch.Tensor]:
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res       
-        
-        
-class AverageMeter(object):
-    """Computes and stores the average and current value
-    https://github.com/pytorch/examples/blob/2c57b0011a096aef83da3b5265a14db2f80cb124/imagenet/main.py#L363
-    """
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-
-class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
 def test(testloader, model, criterion, device=None, batch_stop:int=-1):
@@ -178,10 +136,10 @@ def test_mse_sim(testloader, model: MemSE, device=None, batch_stop: int = -1, tr
 @torch.inference_mode()
 def test_acc_sim(testloader, model: MemSE, device=None, batch_stop:int=-1, trials:int=100):
     assert not hasattr(testloader, '__output_loader')
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
+    batch_time = AverageMeter('Batch time', ':6.3f')
+    data_time = AverageMeter('Data time', ':6.3f')
+    top1 = AverageMeter('Acc@1', ':4.2f')
+    top5 = AverageMeter('Acc@5', ':4.2f')
 
     # switch to evaluate mode
     model.eval()
