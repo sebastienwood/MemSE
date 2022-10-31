@@ -15,7 +15,6 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 	new_gamma = torch.zeros(0)
 	new_mu = r * oe.contract('ij,bj->bi', G, mu)
 
-	#TODO marginal opt if sigma_c_t is a unique value
 	sigma_c_sq = torch.square(sigma_c)
 	mu_sq = torch.square(mu)
 

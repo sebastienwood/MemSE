@@ -21,6 +21,9 @@ logger = logging.getLogger("numba")
 logger.setLevel(logging.ERROR)
 
 torch.manual_seed(0)
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.allow_tf32 = True
+torch.backends.cuda.matmul.allow_tf32 = True
 OPTI_BS = 10
 
 #####
@@ -31,28 +34,28 @@ def parse_args():
 	parser.add_argument('--device', '-D', default='cuda', type=str)
 	parser.add_argument('--power-budget', '-P', default=1e6, type=int, dest='power_budget')
 	parser.add_argument('--memscale', action='store_true')
-	parser.add_argument('--network', default='smallest_vgg_ReLU', type=str)
+	parser.add_argument('--network', default='make_JohNet', type=str)
 	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('-R', default=1, type=int)
 	parser.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
-	parser.add_argument('--N-mc', default=20, type=int, dest='N_mc')
+	parser.add_argument('--N-mc', default=1000, type=int, dest='N_mc')
 	parser.add_argument('--sigma', '-S', default=0.01, type=float)
 	parser.add_argument('-N', default=1280000000, type=int)
 
-	parser.add_argument('--batch-stop-accuracy', default=2, type=int, help='Set it to -1 to run all avail. batches')
-	parser.add_argument('--batch-stop-power', default=2, type=int, help='Set it to -1 to run all avail. batches')
+	parser.add_argument('--batch-stop-accuracy', default=-1, type=int, help='Set it to -1 to run all avail. batches')
+	parser.add_argument('--batch-stop-power', default=500, type=int, help='Set it to -1 to run all avail. batches')
 	parser.add_argument('--batch-stop-opt', default=-1, type=int, help='Set it to -1 to run all avail. batches')
 
-	parser.add_argument('--gen-all', default=1, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
-	parser.add_argument('--gen-layer', default=5, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
-	parser.add_argument('--gen-col', default=10, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
+	parser.add_argument('--gen-all', default=20, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
+	parser.add_argument('--gen-layer', default=100, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
+	parser.add_argument('--gen-col', default=250, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
 	return parser.parse_args()
 
 args = parse_args()
 device = args.device if torch.cuda.is_available() else 'cpu'
 test_acc_sim = partial(test_acc_sim, device=device)
-test_mse_th = partial(test_mse_th, device=device)
+test_mse_th = partial(test_mse_th, device=device, memory_flush=False)
 starting_time = time.time()
 
 #####
@@ -79,7 +82,7 @@ print(f'In column mode, the model have {nvar_col} variables, and {nvar_layer} in
 quanter = MemristorQuant(model, std_noise=args.sigma, N=args.N)
 memse = MemSE(model, quanter).to(device)
 
-opti_bs = 7 #batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=device)
+opti_bs = 5 #batch_size_opt(train_clean_loader, memse, OPTI_BS, 10, device=device)
 print(f'The maximum batch size was found to be {opti_bs}')
 
 output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
@@ -120,7 +123,7 @@ class problemClass(Problem):
 		a = []
 		for G  in Gmax:
 			self.memse.quanter.Gmax = G
-			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop, memory_flush=False)
+			mse, P = test_mse_th(self.dataloader, self.memse, batch_stop=self.batch_stop)
 			a.append([P, mse])
 
 		a = np.array(a)
@@ -229,6 +232,7 @@ for mode in MODES_INIT.keys():
 											start_Gmax=start_Gmax,
 											batch_stop=args.batch_stop_opt)
 
+	print(f'Out of GA: \n Gmax = {Gmax_tab_all} \n Wmax = {memse.quanter.Wmax}')
 	RES_GMAX[mode] = Gmax_tab_all
 	RES_MSE[mode] = mse_all
 	RES_P[mode] = P_all
