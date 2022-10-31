@@ -53,6 +53,7 @@ def parse_args():
 	return parser.parse_args()
 
 args = parse_args()
+print(args)
 device = args.device if torch.cuda.is_available() else 'cpu'
 test_acc_sim = partial(test_acc_sim, device=device)
 test_mse_th = partial(test_mse_th, device=device, memory_flush=False)
