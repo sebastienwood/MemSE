@@ -20,7 +20,7 @@ def linear_layer_vec_batched(mu, gamma: torch.Tensor, G, sigma_c, r:float, gamma
 
 	gg = oe.contract('bij->bi', oe.contract('bij,i->bij', mu_sq.unsqueeze(dim=1).expand((mu.shape[0],G.shape[0],)+mu.shape[1:]), sigma_c_sq)) #1st term
 	if gamma_shape is not None and not gamma_only_diag:
-		new_gamma = torch.zeros(gamma_shape[0],G.shape[0],G.shape[0], dtype=mu.dtype, device=mu.device)
+		new_gamma = torch.zeros(gamma_shape[0],G.shape[0],G.shape[0], dtype=gamma.dtype, device=mu.device)
 		gamma_shape = None
 	elif gamma_shape is None:
 		if not gamma_only_diag:
