@@ -216,8 +216,10 @@ for mode in MODES_INIT.keys():
 	print(f'Performing opt in {mode=}')
 
 	if mode == 'LAYERWISE':
+		print(f'{RES_GMAX["ALL"]=} {RES_WMAX["LAYERWISE"]=} {RES_WMAX["ALL"]=}')
 		start_Gmax = default(RES_GMAX['ALL'], 1.) * numpify(RES_WMAX['LAYERWISE']) / RES_WMAX['ALL'].item()
 	elif mode == 'COLUMNWISE':
+		print(f'{RES_GMAX["LAYERWISE"]=} {RES_WMAX["COLUMNWISE"]=} {RES_WMAX["LAYERWISE"]=}')
 		start_Gmax = np.concatenate([RES_GMAX['LAYERWISE'][i].item() * numpify(RES_WMAX['COLUMNWISE'][i]) / RES_WMAX['LAYERWISE'][i].item() for i in range(len(RES_WMAX['COLUMNWISE']))])
 	else:
 		start_Gmax = None
@@ -260,6 +262,7 @@ for mode, Gmax in RES_GMAX.items():
     _, pows = test_mse_th(small_test_loader, memse, batch_stop=args.batch_stop_power)
     RES_ACC[mode] = acc
     RES_POW[mode] = pows
+    print(f'Done post for mode {mode}')
 
 torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
 print(f'opt.py ran in {(time.time() - starting_time)/60} minutes')
