@@ -4,6 +4,7 @@ import torch.nn as nn
 import numpy as np
 import gc
 import sys
+import random
 
 from MemSE.nn import Conv2DUF
 
@@ -111,3 +112,10 @@ def listify(val):
 def numpify(val: torch.Tensor):
     assert isinstance(val, torch.Tensor)
     return val.detach().cpu().numpy()
+
+
+def seed_all(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

@@ -8,7 +8,7 @@ import time
 import numpy as np
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant, ROOT, METHODS
-from MemSE.utils import n_vars_computation, numpify, default
+from MemSE.utils import n_vars_computation, numpify, default, seed_all
 from MemSE.dataset import batch_size_opt, get_dataloader, get_output_loader
 from MemSE.model_loader import load_model
 from MemSE.train_test_loop import test_acc_sim, test_mse_th
@@ -20,7 +20,7 @@ import logging
 logger = logging.getLogger("numba")
 logger.setLevel(logging.ERROR)
 
-torch.manual_seed(0)
+seed_all(0)
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -213,6 +213,8 @@ for mode in MODES_INIT.keys():
 
 	RES_WMAX[mode] = memse.quanter.Wmax
 
+	print(f'Performing opt in {mode=}')
+
 	if mode == 'LAYERWISE':
 		start_Gmax = default(RES_GMAX['ALL'], 1.) * numpify(RES_WMAX['LAYERWISE']) / RES_WMAX['ALL'].item()
 	elif mode == 'COLUMNWISE':
@@ -220,7 +222,7 @@ for mode in MODES_INIT.keys():
 	else:
 		start_Gmax = None
 
-	print(mode)
+	
 	print(f'{start_Gmax=}')
 
 	P_all, mse_all, Gmax_tab_all = genetic_alg(memse,
