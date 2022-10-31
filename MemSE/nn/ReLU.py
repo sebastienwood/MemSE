@@ -65,7 +65,6 @@ def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=S
 class ReLU_(MemSEAct):
     __type__ = 'ReLU'
     @staticmethod
-    @torch.jit.script
     def main(module, data, mu, sigma_2, *args, **kwargs):
         return f(mu, sigma_2)
 
