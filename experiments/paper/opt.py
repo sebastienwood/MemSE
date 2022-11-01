@@ -252,6 +252,7 @@ print(RES_MSE)
 #####
 RES_ACC = {}
 RES_POW = {}
+end = time.time()
 for mode, Gmax in RES_GMAX.items():
     if np.any(Gmax) == None:
         print(f'A Gmax in {mode=} was NaN')
@@ -263,6 +264,7 @@ for mode, Gmax in RES_GMAX.items():
     RES_ACC[mode] = acc
     RES_POW[mode] = pows
     print(f'Done post for mode {mode}')
+print(f'Power/acc results took {(time.time() - end)/60} minutes')
 
 torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
 print(f'opt.py ran in {(time.time() - starting_time)/60} minutes')
