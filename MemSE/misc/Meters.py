@@ -7,7 +7,7 @@ class AverageMeter(object):
 	"""Computes and stores the average and current value
 	https://github.com/pytorch/examples/blob/2c57b0011a096aef83da3b5265a14db2f80cb124/imagenet/main.py#L363
 	"""
-	__slots__ = ('name', 'fmt', 'val', 'avg', 'sum', 'count')
+	#__slots__ = ('name', 'fmt', 'val', 'avg', 'sum', 'count')
 	def __init__(self, name, fmt=':f'):
 		self.name = name
 		self.fmt = fmt
@@ -31,7 +31,7 @@ class AverageMeter(object):
 
 
 class HistMeter(AverageMeter):
-	__slots__ = ('hist', 'histed')
+	#__slots__ = ('hist', 'histed')
 	def __init__(self, name, fmt=':f', histed='sum'):
 		super().__init__(name, fmt)
 		self.histed = histed

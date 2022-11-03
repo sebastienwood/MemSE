@@ -3,7 +3,7 @@ import torch
 import time
 
 class Timer():
-    __slots__ = ('start_time', 'end_time')
+    #__slots__ = ('start_time', 'end_time')
     def __init__(self) -> None:
         self.start_time = None
         self.end_time = None
