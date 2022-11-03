@@ -33,27 +33,35 @@ def parse_args():
 	parser = ArgumentParser(description='Gmax optimizer')
 	parser.add_argument('--device', '-D', default='cuda', type=str)
 	parser.add_argument('--power-budget', '-P', default=1e6, type=int, dest='power_budget')
-	parser.add_argument('--memscale', action='store_true')
 	parser.add_argument('--network', default='make_JohNet', type=str)
-	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('--N-mc', default=1000, type=int, dest='N_mc')
+ 
+	# DLOADER
+	dloader = parser.add_argument_group('Dataloader related args')
+	dloader.add_argument('--memscale', action='store_true')
+	dloader.add_argument('--datapath', default=f'{ROOT}/data', type=str)
+	dloader.add_argument('--dataset', default='cifar10', type=str)
+	dloader.add_argument('--per-class-sample', default=1, type=int)
 
 	# QUANTER
-	parser.add_argument('-R', default=1, type=int)
-	parser.add_argument('--sigma', '-S', default=0.01, type=float)
-	parser.add_argument('-N', default=1280000000, type=int)
+	qter = parser.add_argument_group('Quanter related args')
+	qter.add_argument('-R', default=1, type=int)
+	qter.add_argument('--sigma', '-S', default=0.01, type=float)
+	qter.add_argument('-N', default=1280000000, type=int)
 
 	# BATCH STOP
-	parser.add_argument('--batch-stop-accuracy', default=-1, type=int, help='Set it to -1 to run all avail. batches')
-	parser.add_argument('--batch-stop-power', default=500, type=int, help='Set it to -1 to run all avail. batches')
-	parser.add_argument('--batch-stop-opt', default=-1, type=int, help='Set it to -1 to run all avail. batches')
+	bs = parser.add_argument_group('Batch stop related args')
+	bs.add_argument('--batch-stop-accuracy', default=-1, type=int, help='Set it to -1 to run all avail. batches')
+	bs.add_argument('--batch-stop-power', default=500, type=int, help='Set it to -1 to run all avail. batches')
+	bs.add_argument('--batch-stop-opt', default=-1, type=int, help='Set it to -1 to run all avail. batches')
 
 	# GA
-	parser.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
-	parser.add_argument('--gen-all', default=20, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
-	parser.add_argument('--gen-layer', default=100, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
-	parser.add_argument('--gen-col', default=250, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
+	ga = parser.add_argument_group('Genetic algorithm related args')
+	ga.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
+	ga.add_argument('--gen-all', default=20, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
+	ga.add_argument('--gen-layer', default=100, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
+	ga.add_argument('--gen-col', default=250, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
 	return parser.parse_args()
 
 args = parse_args()
@@ -77,7 +85,7 @@ result_filename = result_folder / fname
 # MODEL LOAD
 #####
 bs = 128
-train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_dataloader('cifar10', root=args.datapath, bs=bs, memscale=args.memscale, train_set_clean_sample_per_classes=1)
+train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_dataloader(args.dataset, root=args.datapath, bs=bs, memscale=args.memscale, train_set_clean_sample_per_classes=args.per_class_sample)
 model = load_model(args.network, nclasses)
 model = METHODS[args.method](model, input_shape)
 
