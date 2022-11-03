@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 from torchtyping import TensorType
 from itertools import product
 
@@ -63,6 +63,7 @@ def fused_conv2duf(out_gamma: TensorType["batch", "channel_out", "width_out", "h
                    in_mu: TensorType["batch", "channel_in", "width_in", "height_in"],
                    in_gamma: TensorType["batch", "channel_in", "width_in", "height_in", "channel_in", "width_in", "height_in"],
                    weights: TensorType["channel_out", "channel_in", "width", "height"],
+                   bias: Optional[TensorType["channel_out"]],
                    c: TensorType["channel_out"],
                    sigma: float,
                    r: float,
@@ -73,12 +74,17 @@ def fused_conv2duf(out_gamma: TensorType["batch", "channel_out", "width_out", "h
     '''
     # TODO init out_gamma here, shape full
     # TODO reduce by symmetry, store twice if needed
+    # TODO fused with relu
     r_2 = r ** 2
     for bi in range(out_gamma.shape[0]):
         pi = 0
         for ci in range(out_gamma.shape[1]):
             ratio_mse = (sigma * SQRT_2) ** 2 / (c[ci] ** 2)
             ratio_p = (sigma / c[ci]) ** 2
+            if bias is not None:
+                b = bias[ci]
+                abs_b = c[ci] * b
+                b_p, b_n = min(0, b), min(0, -b)
             for ii in range(out_gamma.shape[2]):
                 strided_ii = ii * stride[0]
                 for ji in range(out_gamma.shape[3]):
@@ -152,8 +158,14 @@ def fused_conv2duf(out_gamma: TensorType["batch", "channel_out", "width_out", "h
                                                             w_r_p = min(0, w_r)
                                                             w_r_n = min(0, -w_r)
                                                             pi += w_l_p * w_r_p * g + w_l_n * w_r_n * g  # double conv for energy
+                                if bias is not None and ci == cj:
+                                    og += 1.
                                 out_gamma[bi, ci, ii, ji, cj, ij, jj] += og * r_2
                                 if flag_diag:
+                                    if bias is not None:
+                                        pi_patch_n += 1 + b_n.
+                                        pi_patch_p += 1 + b_p.
+                                        om += b
                                     out_mu[bi, ci, ii, ji] += om * r
                                     pi += pi_patch_p ** 2 + pi_patch_n ** 2 
         out_p[bi] += pi * r
@@ -197,7 +209,7 @@ if __name__ == '__main__':
     assert who == conv(in_mu).shape[2]
     conv2duf = Conv2DUF(conv, in_mu.shape, torch.Size([ch, who, who]))
     quanter = MemristorQuant(conv2duf, std_noise=sigma)
-    _ = MemSE.init_learnt_gmax(quanter)
+    # _ = MemSE.init_learnt_gmax(quanter)
     quanter.quant()
     c = conv2duf.weight.learnt_Gmax / conv2duf.weight.Wmax
     if c.dim() == 0:
