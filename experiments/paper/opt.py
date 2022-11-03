@@ -37,16 +37,20 @@ def parse_args():
 	parser.add_argument('--network', default='make_JohNet', type=str)
 	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
-	parser.add_argument('-R', default=1, type=int)
-	parser.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
 	parser.add_argument('--N-mc', default=1000, type=int, dest='N_mc')
+
+	# QUANTER
+	parser.add_argument('-R', default=1, type=int)
 	parser.add_argument('--sigma', '-S', default=0.01, type=float)
 	parser.add_argument('-N', default=1280000000, type=int)
 
+	# BATCH STOP
 	parser.add_argument('--batch-stop-accuracy', default=-1, type=int, help='Set it to -1 to run all avail. batches')
 	parser.add_argument('--batch-stop-power', default=500, type=int, help='Set it to -1 to run all avail. batches')
 	parser.add_argument('--batch-stop-opt', default=-1, type=int, help='Set it to -1 to run all avail. batches')
 
+	# GA
+	parser.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
 	parser.add_argument('--gen-all', default=20, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
 	parser.add_argument('--gen-layer', default=100, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
 	parser.add_argument('--gen-col', default=250, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
