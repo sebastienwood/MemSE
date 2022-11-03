@@ -1,11 +1,13 @@
 import time
+from .Timer import Timer
 
-__all__ = ['AverageMeter', 'ProgressMeter']
+__all__ = ['AverageMeter', 'HistMeter', 'TimingMeter', 'ProgressMeter']
 
 class AverageMeter(object):
 	"""Computes and stores the average and current value
 	https://github.com/pytorch/examples/blob/2c57b0011a096aef83da3b5265a14db2f80cb124/imagenet/main.py#L363
 	"""
+	__slots__ = ('name', 'fmt', 'val', 'avg', 'sum', 'count')
 	def __init__(self, name, fmt=':f'):
 		self.name = name
 		self.fmt = fmt
@@ -26,6 +28,28 @@ class AverageMeter(object):
 	def __str__(self):
 		fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
 		return fmtstr.format(**self.__dict__)
+
+
+class HistMeter(AverageMeter):
+	__slots__ = ('hist', 'histed')
+	def __init__(self, name, fmt=':f', histed='sum'):
+		super().__init__(name, fmt)
+		self.histed = histed
+		self.hist = []
+
+	def update(self, val, n=1):
+		super().update(val, n)
+		self.hist.append(getattr(self, self.histed))
+
+
+class TimingMeter(HistMeter, Timer):
+	def __init__(self, name, fmt=':f'):
+		HistMeter.__init__(self, name, fmt)
+		Timer.__init__(self)
+
+	def __exit__(self):
+		Timer.__exit__(self)
+		HistMeter.update(self, Timer.__call__(self))
 
 
 class ProgressMeter(object):
