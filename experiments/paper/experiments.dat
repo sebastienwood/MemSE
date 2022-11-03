@@ -1,1 +1,5 @@
-python experiments/paper/opt.py --network make_JohNet
+python experiments/paper/opt.py --memscale --power-budget 500000
+python experiments/paper/opt.py --memscale --power-budget 600000
+python experiments/paper/opt.py --memscale --power-budget 750000
+python experiments/paper/opt.py --memscale --power-budget 1000000
+python experiments/paper/opt.py --memscale --power-budget 10000000
