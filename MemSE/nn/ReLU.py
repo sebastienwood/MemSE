@@ -17,7 +17,7 @@ def relu(module, data):
     assert sigma_2.numel() == mu.numel()
 
     if gamma_shape is not None:
-        gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=mu.dtype, device=mu.device)
+        gamma = torch.zeros(gamma_shape[0],gamma_shape[1],gamma_shape[2],gamma_shape[3],gamma_shape[4],gamma_shape[5],gamma_shape[6], dtype=gamma.dtype, device=mu.device)
         gamma_shape = None
 
     DENOM = math.sqrt(2 * math.pi)
@@ -37,34 +37,35 @@ def relu(module, data):
     data['gamma'] = ga_r
     data['gamma_shape'] = gamma_shape
     
+    
+@torch.jit.script
+def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=SQRT_2):
+    sigma = torch.sqrt(sigma_2)
 
-import numpy as np
+    # séparer positifs et nuls
+    # pour le spositifs -> calculs
+    # pour les nuls -> mu_p = relu(mu)
+    # pour gamma_p les nuls -> 0
+
+    first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
+    second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
+
+    mu_p = first_m + mu * second_m
+
+    first_g = mu * first_m
+    second_g = (sigma_2+torch.square(mu)) * second_m
+    gamma_p = first_g + second_g - mu_p ** 2
+
+    mu_p = torch.where(sigma > 0, mu_p, torch.relu(mu))
+    gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
+
+    return mu_p, gamma_p
+    
+
 class ReLU_(MemSEAct):
     __type__ = 'ReLU'
     @staticmethod
     def main(module, data, mu, sigma_2, *args, **kwargs):
-        @torch.jit.script
-        def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=SQRT_2):
-            sigma = torch.sqrt(sigma_2)
-
-            # séparer positifs et nuls
-            # pour le spositifs -> calculs
-            # pour les nuls -> mu_p = relu(mu)
-            # pour gamma_p les nuls -> 0
-
-            first_m = (sigma / DENOM) * torch.exp(-torch.square(mu / sigma) / 2)
-            second_m = 0.5 * (1-torch.erf(-mu / (sigma * SQRT_2)))
-
-            mu_p = first_m + mu * second_m
-
-            first_g = mu * first_m
-            second_g = (sigma_2+torch.square(mu)) * second_m
-            gamma_p = first_g + second_g - mu_p ** 2
-
-            mu_p = torch.where(sigma > 0, mu_p, torch.relu(mu))
-            gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
-            
-            return mu_p, gamma_p
         return f(mu, sigma_2)
 
     @classmethod

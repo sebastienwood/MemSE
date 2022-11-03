@@ -15,7 +15,7 @@ class MemSEAct:
         mu, gamma, gamma_shape = data['mu'], data['gamma'], data['gamma_shape']
         original_mu_shape = mu.shape
         if gamma_shape is not None:
-            gamma = torch.zeros(*gamma_shape, dtype=mu.dtype, device=mu.device)
+            gamma = torch.zeros(*gamma_shape, dtype=gamma.dtype, device=mu.device)
             gamma_shape = None
 
         if len(gamma.shape) == 7: # TODO could simplify by flattening, all subcalls should be elementwise

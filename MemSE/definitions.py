@@ -19,6 +19,7 @@ UNSUPPORTED_OPS = [
 	nn.BatchNorm2d,
 	nn.GELU,
 	nn.Conv2d,
+	nn.Dropout,
 ]
 
 SUPPORTED_OPS = {

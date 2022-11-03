@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1       # Request GPU "generic resources"
 #SBATCH --cpus-per-task=12  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #SBATCH --mem=120G       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-#SBATCH --time=0-1:00     # DD-HH:MM:SS
+#SBATCH --time=3-1:00     # DD-HH:MM:SS
 #SBATCH --mail-user=sebastien.henwood@polymtl.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=FAIL
@@ -21,6 +21,12 @@ nvidia-smi
 
 #aSBATCH --cpus-per-task=4  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #aSBATCH --mem=12000M       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
+# python experiments/paper/opt_profile.py --network make_JohNet
+# python experiments/paper/opt.py --memscale --power-budget 550000
+# python experiments/paper/opt.py --memscale --power-budget 600000
+# python experiments/paper/opt.py --memscale --power-budget 750000
+# python experiments/paper/opt.py --memscale --power-budget 1000000
+# python experiments/paper/opt.py --memscale --power-budget 10000000
 
 ###
 # ENV PREPARATION
@@ -34,6 +40,7 @@ mkdir $datapath
 TODAY=$(TZ=":America/Montreal" date)
 COMMIT_ID=$(git rev-parse --verify HEAD)
 echo "Experiment $SLURM_JOB_ID ($PWD) start $TODAY on node $SLURMD_NODENAME (git commit id $COMMIT_ID)"
+python -m torch.utils.collect_env
 
 # Prepare data
 datapath=$SLURM_TMPDIR/data

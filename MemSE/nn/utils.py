@@ -48,7 +48,8 @@ def diagonal_replace(tensor, diagonal, backprop:bool=False):
     assert len(diagonal.shape) == 2
     assert len(tensor.shape) == 3
     assert tensor.shape[1] == tensor.shape[2]
-    tensor[:, range(tensor.shape[1]), range(tensor.shape[2])] = diagonal
+    torch.diagonal(tensor, dim1=1, dim2=2).data.copy_(diagonal)
+    #tensor[:, range(tensor.shape[1]), range(tensor.shape[2])] = diagonal
     return tensor
 
 

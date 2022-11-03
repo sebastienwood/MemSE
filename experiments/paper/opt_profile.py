@@ -16,11 +16,17 @@ from MemSE.train_test_loop import test_acc_sim, test_mse_th
 from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.core.problem import Problem
 
+from torch.profiler import profile, record_function, ProfilerActivity
+
 import logging
 logger = logging.getLogger("numba")
 logger.setLevel(logging.ERROR)
 
 torch.manual_seed(0)
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.allow_tf32 = True
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.cuda.set_sync_debug_mode(1)
 OPTI_BS = 10
 
 #####
@@ -35,7 +41,7 @@ def parse_args():
 	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('-R', default=1, type=int)
-	parser.add_argument('--ga-popsize', default=100, type=int, dest='ga_popsize')
+	parser.add_argument('--ga-popsize', default=2, type=int, dest='ga_popsize')
 	parser.add_argument('--N-mc', default=20, type=int, dest='N_mc')
 	parser.add_argument('--sigma', '-S', default=0.01, type=float)
 	parser.add_argument('-N', default=1280000000, type=int)
@@ -50,7 +56,9 @@ def parse_args():
 	return parser.parse_args()
 
 args = parse_args()
+print(args)
 device = args.device if torch.cuda.is_available() else 'cpu'
+
 test_acc_sim = partial(test_acc_sim, device=device)
 test_mse_th = partial(test_mse_th, device=device, memory_flush=False)
 
@@ -62,6 +70,7 @@ result_folder = folder / 'results'
 result_folder.mkdir(exist_ok=True)
 fname = f'opti_{args.method}_{args.network}_{args.power_budget}.z'
 result_filename = result_folder / fname
+profile_filename = result_folder / 'trace.json'
 
 
 #####
@@ -219,9 +228,10 @@ for mode in ['ALL']:
 	print(f'{start_Gmax=}')
 
 	starting_time = time.time()
+	
 	P_all, mse_all, Gmax_tab_all = genetic_alg(memse,
-                                            n_vars=MODES_INIT[mode],
-                                            dataloader=output_train_loader,
+											n_vars=MODES_INIT[mode],
+											dataloader=output_train_loader,
 											nb_gen=MODES_GEN[mode],
 											pop_size=args.ga_popsize,
 											power_budget=args.power_budget,
@@ -229,12 +239,19 @@ for mode in ['ALL']:
 											start_Gmax=start_Gmax,
 											batch_stop=args.batch_stop_opt)
 	print(f'genetic alg ran in {(time.time() - starting_time)/60} minutes on {args.network} with {MODES_GEN[mode]} generations of {args.ga_popsize} individuals ({opti_bs=})')
-
+  
 	RES_GMAX[mode] = Gmax_tab_all
 	RES_MSE[mode] = mse_all
 	RES_P[mode] = P_all
 
-
+inputs, _ = next(iter(output_train_loader))
+with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], profile_memory=True, with_stack=True) as prof:
+	with torch.inference_mode():
+		_ = memse.forward(inputs.to(device))
+prof.export_chrome_trace(str(profile_filename.resolve().absolute()))
+print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+print(prof.key_averages(group_by_stack_n=5).table(sort_by='self_cpu_time_total', row_limit=10))
 print(RES_P)
 print(RES_MSE)
 
