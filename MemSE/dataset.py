@@ -75,9 +75,9 @@ def get_dataset(name:str) -> Tuple[Callable, int, tuple]:
 
 def get_dataloader(name:str,
                    root=f'{ROOT}/data',
-                   bs=128,
-                   workers=4,
-                   memscale = False,
+                   bs:int=128,
+                   workers:int=4,
+                   memscale:bool = False,
                    train_set_sample_per_classes: Optional[int] = None,
                    train_set_clean_sample_per_classes: Optional[int] = None,
                    test_set_sample_per_classes: Optional[int] = None) -> Tuple[data.DataLoader, data.DataLoader, data.DataLoader, int, tuple]:
