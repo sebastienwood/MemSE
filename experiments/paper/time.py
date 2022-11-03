@@ -10,7 +10,6 @@ from MemSE.misc import TimingMeter, HistMeter
 from MemSE.utils import seed_all
 from MemSE.dataset import get_dataloader, get_output_loader
 from MemSE.model_loader import load_model
-from MemSE.train_test_loop import test_acc_sim, test_mse_th
 
 
 import logging
@@ -42,8 +41,6 @@ def parse_args():
 args = parse_args()
 print(args)
 device = args.device if torch.cuda.is_available() else 'cpu'
-test_acc_sim = partial(test_acc_sim, device=device)
-test_mse_th = partial(test_mse_th, device=device, memory_flush=False)
 starting_time = time.time()
 
 #####
