@@ -1,4 +1,4 @@
-'https://github.com/pytorch/torchdynamo/blob/main/torchinductor/triton_ops/conv.py'
+'https://github.com/pytorch/pytorch/blob/master/torch/_inductor/triton_ops/conv.py'
 
 import torch
 import triton
