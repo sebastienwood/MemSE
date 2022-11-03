@@ -36,7 +36,7 @@ def parse_args():
 	parser.add_argument('--network', default='make_JohNet', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('--N-mc', default=1000, type=int, dest='N_mc')
- 
+
 	# DLOADER
 	dloader = parser.add_argument_group('Dataloader related args')
 	dloader.add_argument('--memscale', action='store_true')
