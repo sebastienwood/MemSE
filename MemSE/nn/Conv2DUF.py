@@ -139,17 +139,17 @@ class Conv2DUF(nn.Module):
                b: TensorType["channel_out"],
                r,
                sigma):
-        sum_x_gd: torch.TensorType = x ** 2
+        sum_x_gd: torch.Tensor = x ** 2
         if gamma_shape is None:
             sum_x_gd += gamma_to_diag(gamma)
-        abs_w: torch.TensorType = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
+        abs_w: torch.Tensor = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
         if b is not None:
             abs_b = oe.contract('c,c->c', torch.abs(b), c).to(sum_x_gd) 
             Bpos = torch.clip(b, min=0)
             Bneg = torch.clip(-b, min=0)
         else:
             abs_b = Bpos = Bneg = None
-        e_p_mem: torch.TensorType = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **conv2duf.conv_property_dict), dim=(1,2,3))
+        e_p_mem: torch.Tensor = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **conv2duf.conv_property_dict), dim=(1,2,3))
 
         Gpos = torch.clip(w, min=0)
         Gneg = torch.clip(-w, min=0)
