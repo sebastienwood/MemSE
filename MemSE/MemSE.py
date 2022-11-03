@@ -118,8 +118,8 @@ class MemSE(nn.Module):
         self.unquant()
         return out.flatten(start_dim=1)
 
-    def no_power_forward(self, x, meminfo: Optional[str] = None):
-        return self.forward(x, False, meminfo=meminfo)
+    def no_power_forward(self, x, meminfo: Optional[str] = None, **kwargs):
+        return self.forward(x, False, meminfo=meminfo, **kwargs)
 
     def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False, output_handle = None):
         reps = int(reps)
