@@ -47,8 +47,8 @@ class TimingMeter(HistMeter, Timer):
 		HistMeter.__init__(self, name, fmt)
 		Timer.__init__(self)
 
-	def __exit__(self):
-		Timer.__exit__(self)
+	def __exit__(self, *args, **kwargs):
+		Timer.__exit__(self, *args, **kwargs)
 		HistMeter.update(self, Timer.__call__(self))
 
 
