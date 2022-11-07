@@ -280,5 +280,5 @@ for mode, Gmax in RES_GMAX.items():
     print(f'Done post for mode {mode}')
 print(f'Power/acc results took {(time.time() - end)/60} minutes')
 
-torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW}, result_filename)
+torch.save({'Gmax': RES_GMAX, 'Acc': RES_ACC, 'Pow': RES_POW, 'run_params': vars(args)}, result_filename)
 print(f'opt.py ran in {(time.time() - starting_time)/60} minutes')
