@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from functools import partial
 from pathlib import Path
 import time
 import torch
@@ -29,7 +28,7 @@ def parse_args():
 	parser = ArgumentParser(description='Time comparison monte-carlo and MemSE')
 	parser.add_argument('--device', '-D', default='cuda', type=str)
 	parser.add_argument('--memscale', action='store_true')
-	parser.add_argument('--network', default='make_JohNet', type=str)
+	parser.add_argument('--network', default='smallest_vgg_ReLU', type=str)
 	parser.add_argument('--datapath', default=f'{ROOT}/data', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('-R', default=1, type=int)
@@ -76,6 +75,7 @@ mse_memse = torch.amax(mse_gamma(tar, m, g), dim=1).mean().item()
 
 timing_mc = TimingMeter('Timing MC')
 avg_mc = HistMeter('MSE MC', histed='avg')
+memse.quant(c_one=False)
 for _ in range(args.N_mc):
     with timing_mc:
         outputs = memse.forward_noisy(inp)

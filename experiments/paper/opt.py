@@ -5,6 +5,7 @@ import copy
 import time
 import torch
 import time
+import datetime
 import numpy as np
 from MemSE.nn import *
 from MemSE import MemSE, MemristorQuant, ROOT, METHODS
@@ -74,8 +75,9 @@ starting_time = time.time()
 #####
 # BOOKEEPING SETUP
 #####
+now = datetime.datetime.now()
 folder = Path(__file__).parent
-result_folder = folder / 'results'
+result_folder = folder / 'results' / now.strftime("%y_%m_%d")
 result_folder.mkdir(exist_ok=True)
 fname = f'opti_{args.method}_{args.network}_{args.power_budget}.z'
 result_filename = result_folder / fname
