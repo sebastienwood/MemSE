@@ -1,6 +1,5 @@
-python experiments/paper/opt.py --memscale --power-budget 500000 --per-class-sample 2
-python experiments/paper/opt.py --memscale --power-budget 600000 --per-class-sample 2
-python experiments/paper/opt.py --memscale --power-budget 700000 --per-class-sample 2
-python experiments/paper/opt.py --memscale --power-budget 800000 --per-class-sample 2
-python experiments/paper/opt.py --memscale --power-budget 1000000 --per-class-sample 2
-python experiments/paper/time.py
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.05 --per-class-sample 3
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.1 --per-class-sample 3
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.5 --per-class-sample 3
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 1 --per-class-sample 3
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 5 --per-class-sample 3

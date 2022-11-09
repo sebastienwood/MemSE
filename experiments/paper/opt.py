@@ -33,7 +33,6 @@ OPTI_BS = 10
 def parse_args():
 	parser = ArgumentParser(description='Gmax optimizer')
 	parser.add_argument('--device', '-D', default='cuda', type=str)
-	parser.add_argument('--power-budget', '-P', default=1e6, type=int, dest='power_budget')
 	parser.add_argument('--network', default='make_JohNet', type=str)
 	parser.add_argument('--method', default='unfolded', type=str)
 	parser.add_argument('--N-mc', default=1000, type=int, dest='N_mc')
@@ -63,6 +62,10 @@ def parse_args():
 	ga.add_argument('--gen-all', default=20, type=int, dest='gen_all', help='Nb generations for GA in ALL mode')
 	ga.add_argument('--gen-layer', default=100, type=int, dest='gen_layer', help='Nb generations for GA in LAYERWISE mode')
 	ga.add_argument('--gen-col', default=250, type=int, dest='gen_col', help='Nb generations for GA in COLUMNWISE mode')
+ 
+	ga.add_argument('--opt-mode', default='opt_mse', choices=['opt_mse', 'opt_power'], type=str.lower, dest='opt_mode')
+	ga.add_argument('--power-budget', '-P', default=1e6, type=int, dest='power_budget')
+	ga.add_argument('--mse-budget', '-MSE', default=1e6, type=float, dest='mse_budget')
 	return parser.parse_args()
 
 args = parse_args()
@@ -79,7 +82,8 @@ now = datetime.datetime.now()
 folder = Path(__file__).parent
 result_folder = folder / 'results' / now.strftime("%y_%m_%d")
 result_folder.mkdir(exist_ok=True)
-fname = f'opti_{args.method}_{args.network}_{args.power_budget}.z'
+pb = args.power_budget if args.opt_mode == 'opt_mse' else args.mse_budget
+fname = f'opti_{args.method}_{args.network}_{args.opt_mode}_{pb}.z'
 result_filename = result_folder / fname
 
 
@@ -117,7 +121,7 @@ MODES_GEN = {
 #####
 # OPTIMIZER UTILITIES
 ####
-class problemClass(Problem):
+class MemSEProblem(Problem):
 	def __init__(self,
                  n_var,
                  n_obj,
@@ -125,14 +129,18 @@ class problemClass(Problem):
                  xl,
                  xu,
                  memse,
-                 power_budget,
+                 mode:str,
+                 power_budget:int,
+                 mse_budget:float,
                  dataloader,
                  batch_stop: int = -1):
 		super().__init__(n_var=n_var, n_obj=n_obj, n_constr=n_constr, xl=xl, xu=xu)
 		self.memse = memse
 		self.power_budget = power_budget
+		self.mse_budget = mse_budget
 		self.batch_stop = batch_stop
 		self.dataloader = dataloader
+		self.mode = mode
 
 	def _evaluate(self, Gmax, out, *args, **kwargs):
 		a = []
@@ -142,8 +150,16 @@ class problemClass(Problem):
 			a.append([P, mse])
 
 		a = np.array(a)
-		out["F"] =  np.stack(a[:,1]) 
-		out["G"] = np.stack(a[:,0]-self.power_budget)
+		if self.mode == 'opt_mse':
+			optim = np.stack(a[:,1])
+			cs = np.stack(a[:,0] - self.power_budget) 
+		elif self.mode == 'opt_power':
+			optim = np.stack(a[:,0])
+			cs = np.stack(a[:,1] - self.mse_budget) 
+		else:
+			raise ValueError(f'Mode {self.mode} is not supported')
+		out["F"] = optim  # optimized
+		out["G"] = cs  # constraint
 
 
 def genetic_alg(memse:MemSE,
@@ -151,19 +167,23 @@ def genetic_alg(memse:MemSE,
                 dataloader,
 				nb_gen:int=1,
                 pop_size:int=100,
+                mode:str='opt_mse',
                 power_budget:int=1000000,
+                mse_budget:float=1,
                 start_Gmax = None,
                 device = torch.device('cpu'),
                 batch_stop: int = -1):
 
-	problem = problemClass(n_vars,
+	problem = MemSEProblem(n_vars,
 						   1,
                            1,
                            np.ones(n_vars)*0.01,
                            np.ones(n_vars)*500,
-                           memse,
-                           power_budget,
-                           dataloader,
+                           memse=memse,
+                           mode=mode,
+                           power_budget=power_budget,
+                           mse_budget=mse_budget,
+                           dataloader=dataloader,
                            batch_stop=batch_stop)
 
 	if np.any(start_Gmax) == None: 
@@ -246,7 +266,9 @@ for mode in MODES_INIT.keys():
                                             dataloader=output_train_loader,
 											nb_gen=MODES_GEN[mode],
 											pop_size=args.ga_popsize,
+											mode=args.opt_mode,
 											power_budget=args.power_budget,
+											mse_budget=args.mse_budget,
 											device=device,
 											start_Gmax=start_Gmax,
 											batch_stop=args.batch_stop_opt)
