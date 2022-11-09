@@ -174,7 +174,8 @@ def genetic_alg(memse:MemSE,
                 device = torch.device('cpu'),
                 batch_stop: int = -1):
 	if nb_gen < 1:
-		return
+		mse, P = test_mse_th(dataloader, memse, batch_stop=batch_stop)
+		return P, mse, memse.quanter.Gmax.cpu().numpy()
 
 	problem = MemSEProblem(n_vars,
 						   1,
