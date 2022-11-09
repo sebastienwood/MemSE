@@ -215,7 +215,10 @@ def genetic_alg(memse:MemSE,
 		print(t2-t1)
 
 		# access the algorithm to print some intermediate outputs
-		print(f"gen: {obj.n_gen} max gen: {obj.termination.n_max_gen} n_nds: {len(obj.opt)} constr: {obj.opt.get('CV')[0,0]} ideal: {obj.opt.get('F')[0,0]} power: {obj.opt.get('G')[0,0]+power_budget}")
+		if mode == 'opt_mse':
+			print(f"gen: {obj.n_gen} max gen: {obj.termination.n_max_gen} n_nds: {len(obj.opt)} constr: {obj.opt.get('CV')[0,0]} ideal: {obj.opt.get('F')[0,0]} power: {obj.opt.get('G')[0,0]+power_budget}")
+		elif mode == 'opt_power':
+			print(f"gen: {obj.n_gen} max gen: {obj.termination.n_max_gen} n_nds: {len(obj.opt)} constr: {obj.opt.get('CV')[0,0]} ideal: {obj.opt.get('F')[0,0]} mse: {obj.opt.get('G')[0,0]+mse_budget}")
 		print(obj.opt.get('X'),np.min(obj.opt.get('X')),np.max(obj.opt.get('X')))
 		# print(im_problem_function_batched(obj.opt.get('X')[0], args, x, z, device_id=0))
 
