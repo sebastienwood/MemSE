@@ -39,13 +39,17 @@ open(datapath / fname, 'wb').write(r.content)
 
 # LAUNCH
 experiments_path = launcher_path / 'experiments.dat'
+lines = []
 with open(experiments_path, 'r') as fp:
-    counted = len(fp.readlines())
+    while (l := enumerate(fp.readline().rstrip())):
+        idx, line = l
+        if line[0] == '#':
+            continue
+        lines.append(str(idx))
 cmd = ['sbatch']
-if counted > 1:
-    cmd.extend([f'--array=0-{counted - 1}'])
-else:
-    cmd.extend([f'--array=0']) # always an array 
-cmd.extend([str(launcher_path / 'run_experiment.sh')])
-out = run(cmd, capture_output=True)
-print(out)
+idxs = ','.join(lines)
+if len(lines) > 1:
+    cmd.extend([f'--array={idxs}']) # always an array 
+    cmd.extend([str(launcher_path / 'run_experiment.sh')])
+    out = run(cmd, capture_output=True)
+    print(out)
