@@ -9,6 +9,7 @@ from MemSE.misc import TimingMeter, HistMeter
 from MemSE.utils import seed_all
 from MemSE.dataset import get_dataloader, get_output_loader
 from MemSE.model_loader import load_model
+import numpy as np
 
 
 import logging
@@ -59,6 +60,7 @@ model = load_model(args.network, nclasses)
 model = METHODS[args.method](model, input_shape)
 
 quanter = MemristorQuant(model, std_noise=args.sigma, N=args.N)
+quanter.init_gmax_as_wmax()
 memse = MemSE(model, quanter).to(device)
 memse.quant()
 
@@ -71,7 +73,8 @@ timing_memse = TimingMeter('Timing MemSE')
 for _ in range(5):
 	with timing_memse:
 		m, g, _ = memse.forward(inp, manage_quanter=False, compute_power=False)
-mse_memse = torch.amax(mse_gamma(tar, m, g), dim=1).mean().item()
+mse_memse = mse_gamma(tar, m, g).mean().item()
+
 
 timing_mc = TimingMeter('Timing MC')
 avg_mc = HistMeter('MSE MC', histed='avg')
@@ -82,7 +85,7 @@ for _ in range(args.N_mc):
         mse = torch.mean((outputs.detach() - tar) ** 2)
         avg_mc.update(mse.item())
     
-res_dict = {'memse_time': timing_memse.avg, 'memse_val': mse_memse, 'mc_time': timing_mc.hist, 'mc_val': avg_mc.hist}
+res_dict = {'memse_time': timing_memse.avg, 'memse_val': mse_memse, 'mc_time': timing_mc.hist[-1], 'mc_val': np.mean(avg_mc.hist)}
 print(res_dict)
 
 torch.save(res_dict, result_filename)
