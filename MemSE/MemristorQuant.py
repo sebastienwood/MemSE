@@ -256,6 +256,10 @@ class MemristorQuant(object):
 		self.update_w_max()
 		self.param_update()
 
+	def init_gmax_as_wmax(self):
+		for cb in self.crossbars:
+			cb.Gmax = cb.Wmax
+
 	@staticmethod
 	def memory_usage(tensor):
 		'''Return memory usage in MB'''
