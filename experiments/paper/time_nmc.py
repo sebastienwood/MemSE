@@ -121,8 +121,13 @@ for sig_idx in range(sigma_tab.size):
 	print(N_mc)
 
 	memse.quant()
+
+	# WARMUP
+	for _ in range(10):
+		_ = memse.forward(inp, manage_quanter=False, compute_power=False)
+
 	timing_memse = TimingMeter('Timing MemSE')
-	for _ in range(5):
+	for _ in range(10):
 		with timing_memse:
 			m, g, _ = memse.forward(inp, manage_quanter=False, compute_power=False)
 	mse_memse = mse_gamma(tar, m, g).mean().item()
