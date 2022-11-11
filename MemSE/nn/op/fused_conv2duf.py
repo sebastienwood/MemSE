@@ -163,8 +163,8 @@ def fused_conv2duf(out_gamma: TensorType["batch", "channel_out", "width_out", "h
                                 out_gamma[bi, ci, ii, ji, cj, ij, jj] += og * r_2
                                 if flag_diag:
                                     if bias is not None:
-                                        pi_patch_n += 1 + b_n.
-                                        pi_patch_p += 1 + b_p.
+                                        pi_patch_n += 1 + b_n
+                                        pi_patch_p += 1 + b_p
                                         om += b
                                     out_mu[bi, ci, ii, ji] += om * r
                                     pi += pi_patch_p ** 2 + pi_patch_n ** 2 
