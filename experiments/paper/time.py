@@ -69,6 +69,11 @@ output_train_loader = get_output_loader(train_clean_loader, model, device=device
 
 inp, tar = next(iter(output_train_loader))
 inp, tar = inp.to(device), tar.to(device)
+
+# WARMUP
+for _ in range(5):
+    _ = memse.forward(inp, manage_quanter=False, compute_power=False)
+
 timing_memse = TimingMeter('Timing MemSE')
 for _ in range(5):
 	with timing_memse:
