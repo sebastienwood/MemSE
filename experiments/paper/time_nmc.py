@@ -4,7 +4,7 @@ import time
 import torch
 import time
 from MemSE.nn import *
-from MemSE import MemSE, MemristorQuant, ROOT, METHODS
+from MemSE import MemSE, MemristorQuant, ROOT, METHODS, compute_n_mc, compute_sample_moments
 from MemSE.misc import TimingMeter, HistMeter
 from MemSE.utils import seed_all
 from MemSE.dataset import get_dataloader, get_output_loader
@@ -46,40 +46,6 @@ print(args)
 device = args.device if torch.cuda.is_available() else 'cpu'
 starting_time = time.time()
 
-####
-# Tools for optimal N_mc
-####
-
-z_dic = {90: 1.645, 95: 1.96, 96: 2.05, 98: 2.33, 99: 2.58}
-
-
-def compute_sample_moments(memse, x, tar, max_sample):
-    with torch.no_grad():
-
-        if memse.input_bias:
-            x += memse.bias[None, :, :, :]
-        memse.quant(c_one=False)
-        out = torch.mean((memse.forward_noisy(x).detach() - tar) ** 2).item()
-        for i in range(max_sample-1):
-            out += torch.mean((memse.forward_noisy(x).detach()  - tar) ** 2).item()
-        mse = out/i
-
-        out = np.square(torch.mean((memse.forward_noisy(x).detach() - tar) ** 2).item()-mse)
-        for i in range(max_sample-1):
-            out += np.square(torch.mean((memse.forward_noisy(x).detach()  - tar) ** 2).item()-mse)
-        var = out/(i-1)    
-
-        memse.unquant()
-    
-
-
-    return mse, var
-        
-
-def compute_n_mc(CI, z, sample_var):
-    return z*z*sample_var/np.square(CI)
-
-
 
 #####
 # BOOKEEPING SETUP
@@ -97,13 +63,13 @@ train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_datal
 model = load_model(args.network, nclasses)
 model = METHODS[args.method](model, input_shape)
 
-sigma_tab = np.logspace(np.log10(args.start_sigma),np.log10(args.stop_sigma),args.num_sigma)
+sigma_tab = np.logspace(np.log10(args.start_sigma),np.log10(args.stop_sigma),args.num_sigma).tolist()
 print(sigma_tab)
 res_dict_tab = []
 
-for sig_idx in range(sigma_tab.size):
+for sig in sigma_tab:
 
-	quanter = MemristorQuant(model, std_noise=sigma_tab[sig_idx], N=args.N)
+	quanter = MemristorQuant(model, std_noise=sig, N=args.N)
 	quanter.init_gmax_as_wmax()
 	memse = MemSE(model, quanter).to(device)
 	memse.quant()
@@ -116,8 +82,7 @@ for sig_idx in range(sigma_tab.size):
 
 
 	sample_mean, sample_var = compute_sample_moments(memse, inp, tar, 10000)
-	N_mc = compute_n_mc(args.CI*sample_mean/100, z_dic[args.z], sample_var)
-	N_mc = int(N_mc)
+	N_mc = compute_n_mc(args.CI*sample_mean/100, args.z, sample_var)
 	print(N_mc)
 
 	memse.quant()
@@ -142,9 +107,9 @@ for sig_idx in range(sigma_tab.size):
 			mse = torch.mean((outputs.detach() - tar) ** 2)
 			avg_mc.update(mse.item())
 		
-	res_dict = {'sigma':sigma_tab[sig_idx], 'memse_time': timing_memse.avg, 'memse_val': mse_memse, 'mc_time': timing_mc.hist[-1], 'mc_val': np.mean(avg_mc.hist)}
+	res_dict = {'sigma': sig, 'memse_time': timing_memse.avg, 'memse_val': mse_memse, 'mc_time': timing_mc.hist[-1], 'mc_val': np.mean(avg_mc.hist)}
 	print(res_dict)
 	res_dict_tab.append(res_dict)
 
 torch.save(res_dict_tab, result_filename)
-print(f'time.py ran in {(time.time() - starting_time)/60} minutes')
+print(f'time_nmc.py ran in {(time.time() - starting_time)/60} minutes')

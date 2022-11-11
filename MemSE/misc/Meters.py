@@ -15,7 +15,6 @@ class AverageMeter(object):
 
 	def reset(self):
 		self.val = 0
-		self.avg = 0
 		self.sum = 0
 		self.count = 0
 
@@ -23,7 +22,10 @@ class AverageMeter(object):
 		self.val = val
 		self.sum += val * n
 		self.count += n
-		self.avg = self.sum / self.count
+
+	@property
+	def avg(self):
+		return self.sum / self.count
 
 	def __str__(self):
 		fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
