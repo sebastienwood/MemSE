@@ -36,8 +36,8 @@ def parse_args():
 	parser.add_argument('--CI', default=5, type=int)
 	parser.add_argument('--z', default=95, type=int)
 	parser.add_argument('--start_sigma', default=0.001, type=float)
-	parser.add_argument('--stop_sigma', default=0.1, type=float)
-	parser.add_argument('--num_sigma', default=1, type=int)
+	parser.add_argument('--stop_sigma', default=0.03162278, type=float)
+	parser.add_argument('--num_sigma', default=10, type=int)
 	parser.add_argument('-N', default=1280000000, type=int)
 	return parser.parse_args()
 
@@ -53,7 +53,7 @@ starting_time = time.time()
 folder = Path(__file__).parent
 result_folder = folder / 'results'
 result_folder.mkdir(exist_ok=True)
-fname = f'timing_{args.method}_{args.network}.pt'
+fname = f'timing_{args.method}_{args.network}_{args.CI}_{args.z}.pt'
 result_filename = result_folder / fname
 
 #####
