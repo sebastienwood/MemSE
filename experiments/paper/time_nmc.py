@@ -63,7 +63,14 @@ train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_datal
 model = load_model(args.network, nclasses)
 model = METHODS[args.method](model, input_shape)
 
+opti_bs = 1
+output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
+
+inp, tar = next(iter(output_train_loader))
+inp, tar = inp.to(device), tar.to(device)
+
 sigma_tab = np.logspace(np.log10(args.start_sigma),np.log10(args.stop_sigma),args.num_sigma).tolist()
+print('Tableau sigma:')
 print(sigma_tab)
 res_dict_tab = []
 
@@ -72,18 +79,10 @@ for sig in sigma_tab:
 	quanter = MemristorQuant(model, std_noise=sig, N=args.N)
 	quanter.init_gmax_as_wmax()
 	memse = MemSE(model, quanter).to(device)
-	memse.quant()
-
-	opti_bs = 1
-	output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
-
-	inp, tar = next(iter(output_train_loader))
-	inp, tar = inp.to(device), tar.to(device)
-
 
 	sample_mean, sample_var = compute_sample_moments(memse, inp, tar, 10000)
 	N_mc = compute_n_mc(args.CI*sample_mean/100, args.z, sample_var)
-	print(N_mc)
+	print(f'For {sig=}, {N_mc=}')
 
 	memse.quant()
 
