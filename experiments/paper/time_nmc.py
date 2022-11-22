@@ -61,7 +61,7 @@ result_filename = result_folder / fname
 #####
 train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_dataloader('cifar10', root=args.datapath, memscale=args.memscale, train_set_clean_sample_per_classes=1)
 model = load_model(args.network, nclasses)
-model = METHODS[args.method](model, input_shape)
+model = METHODS[args.method](model, input_shape).to(device)
 
 opti_bs = 1
 output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
