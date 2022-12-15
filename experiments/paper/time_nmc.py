@@ -36,8 +36,8 @@ def parse_args():
 	parser.add_argument('--CI', default=5, type=int)
 	parser.add_argument('--z', default=95, type=int)
 	parser.add_argument('--start_sigma', default=0.001, type=float)
-	parser.add_argument('--stop_sigma', default=0.1, type=float)
-	parser.add_argument('--num_sigma', default=1, type=int)
+	parser.add_argument('--stop_sigma', default=0.03162278, type=float)
+	parser.add_argument('--num_sigma', default=10, type=int)
 	parser.add_argument('-N', default=1280000000, type=int)
 	return parser.parse_args()
 
@@ -53,7 +53,7 @@ starting_time = time.time()
 folder = Path(__file__).parent
 result_folder = folder / 'results'
 result_folder.mkdir(exist_ok=True)
-fname = f'timing_{args.method}_{args.network}.pt'
+fname = f'timing_{args.method}_{args.network}_{args.CI}_{args.z}.pt'
 result_filename = result_folder / fname
 
 #####
@@ -61,9 +61,16 @@ result_filename = result_folder / fname
 #####
 train_loader, train_clean_loader, test_loader, nclasses, input_shape = get_dataloader('cifar10', root=args.datapath, memscale=args.memscale, train_set_clean_sample_per_classes=1)
 model = load_model(args.network, nclasses)
-model = METHODS[args.method](model, input_shape)
+model = METHODS[args.method](model, input_shape).to(device)
+
+opti_bs = 1
+output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
+
+inp, tar = next(iter(output_train_loader))
+inp, tar = inp.to(device), tar.to(device)
 
 sigma_tab = np.logspace(np.log10(args.start_sigma),np.log10(args.stop_sigma),args.num_sigma).tolist()
+print('Tableau sigma:')
 print(sigma_tab)
 res_dict_tab = []
 
@@ -72,18 +79,10 @@ for sig in sigma_tab:
 	quanter = MemristorQuant(model, std_noise=sig, N=args.N)
 	quanter.init_gmax_as_wmax()
 	memse = MemSE(model, quanter).to(device)
-	memse.quant()
-
-	opti_bs = 1
-	output_train_loader = get_output_loader(train_clean_loader, model, device=device, overwrite_bs=opti_bs)
-
-	inp, tar = next(iter(output_train_loader))
-	inp, tar = inp.to(device), tar.to(device)
-
 
 	sample_mean, sample_var = compute_sample_moments(memse, inp, tar, 10000)
 	N_mc = compute_n_mc(args.CI*sample_mean/100, args.z, sample_var)
-	print(N_mc)
+	print(f'For {sig=}, {N_mc=}')
 
 	memse.quant()
 

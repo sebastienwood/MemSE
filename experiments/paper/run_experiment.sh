@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1       # Request GPU "generic resources"
 #SBATCH --cpus-per-task=12  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #SBATCH --mem=120G       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-#SBATCH --time=3-1:00     # DD-HH:MM:SS
+#SBATCH --time=1-0:00     # DD-HH:MM:SS
 #SBATCH --mail-user=sebastien.henwood@polymtl.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=FAIL
@@ -22,11 +22,12 @@ nvidia-smi
 #aSBATCH --cpus-per-task=4  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #aSBATCH --mem=12000M       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
 # python experiments/paper/opt_profile.py --network make_JohNet
-# python experiments/paper/opt.py --memscale --power-budget 550000
-# python experiments/paper/opt.py --memscale --power-budget 600000
-# python experiments/paper/opt.py --memscale --power-budget 750000
-# python experiments/paper/opt.py --memscale --power-budget 1000000
-# python experiments/paper/opt.py --memscale --power-budget 10000000
+#python experiments/paper/opt.py --memscale --power-budget 500000 --per-class-sample 2
+#python experiments/paper/opt.py --memscale --power-budget 600000 --per-class-sample 2
+#python experiments/paper/opt.py --memscale --power-budget 700000 --per-class-sample 2
+#python experiments/paper/opt.py --memscale --power-budget 800000 --per-class-sample 2
+#python experiments/paper/opt.py --memscale --power-budget 1000000 --per-class-sample 2
+#python experiments/paper/time.py
 
 ###
 # ENV PREPARATION

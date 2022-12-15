@@ -41,12 +41,12 @@ open(datapath / fname, 'wb').write(r.content)
 experiments_path = launcher_path / 'experiments.dat'
 lines = []
 with open(experiments_path, 'r') as fp:
-    idx = 0
+    idx = -1
     while (line := fp.readline().rstrip()):
+        idx += 1
         if line[0] == '#':
             continue
         lines.append(str(idx))
-        idx += 1
 cmd = ['sbatch']
 idxs = ','.join(lines)
 if len(lines) > 1:
