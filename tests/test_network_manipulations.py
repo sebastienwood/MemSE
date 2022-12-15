@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import pytest
 
-from MemSE.nn import mse_gamma
+from MemSE.nn import mse_gamma, gamma_to_square
 from MemSE import METHODS
 
 DEBUG = False
@@ -23,7 +23,7 @@ def test_memristor_manips(method, device, net, sigma):
     net = MODELS[net]
     conv2duf, o = get_net_transformed(net, method, inp)
     conv2duf, o = conv2duf.to(device), o.to(device)
-    memse = nn2memse(conv2duf, sigma)
+    memse = nn2memse(conv2duf, sigma).to(device)
     m, g, p = memse.forward(inp.to(device))
     assert not torch.any(torch.isnan(m))
     assert not torch.any(torch.isnan(g))

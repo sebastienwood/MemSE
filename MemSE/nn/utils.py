@@ -6,7 +6,7 @@ import opt_einsum as oe
 from typing import Optional, List, Tuple, Union
 
 
-__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_', 'zero_diag', 'LambdaLayer', 'InspectorLayer']
+__all__ = ['mse_gamma', 'diagonal_replace', 'zero_but_diag_', 'quant_but_diag_', 'zero_diag', 'gamma_to_diag', 'gamma_to_square', 'LambdaLayer', 'InspectorLayer']
 
 
 class LambdaLayer(nn.Module):
@@ -152,14 +152,19 @@ def double_conv(tensor: torch.Tensor,
     return anv_res.permute(0, 4, 5, 6, 1, 2, 3).to(memory_format=torch.contiguous_format)
 
 
-def gamma_to_diag(tensor, flatten=False):
+def gamma_to_square(tensor):
+    assert len(tensor.shape) == 7
     bs = tensor.shape[0]
-    nc = tensor.shape[1]
     img_shape = tensor.shape[1:4]
     numel_image = img_shape.numel()
     view = torch.reshape(tensor, (bs,numel_image,numel_image))
+    return view
+
+
+def gamma_to_diag(tensor, flatten=False):
+    view = gamma_to_square(tensor)
     diag = torch.diagonal(view, dim1=1, dim2=2)
-    return diag.reshape((bs,*img_shape)) if not flatten else diag
+    return diag.reshape(tensor.shape[0:4]) if not flatten else diag
 
 
 def gamma_add_diag(tensor, added):

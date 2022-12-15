@@ -7,7 +7,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from prettytable import PrettyTable
 from tqdm import tqdm
 
 from MemSE.definitions import SUPPORTED_OPS
@@ -18,6 +17,7 @@ from MemSE.fx import (get_intermediates,
                       store_add_intermediates_var)
 from MemSE.nn import mse_gamma, zero_but_diag_, zero_diag
 from MemSE.utils import memory_report
+from MemSE.misc import HistMeter
 
 
 def NOOP(*args, **kwargs):
@@ -51,6 +51,7 @@ class MemSE(nn.Module):
 
         #self.learnt_Gmax = self.init_learnt_gmax(quanter, Gmax_init_Wmax)
         # instead, freeze weights
+        self.power_accum = HistMeter('Acc. power')
         self._var_batch = {}
         #self.clip_Gmax()
 
@@ -73,20 +74,30 @@ class MemSE(nn.Module):
     def sigma(self) -> float:
         return self.quanter.std_noise
 
-    def forward(self, x, compute_power: bool = True, output_handle=None, meminfo: Optional[str] = None, manage_quanter: bool = True):
+    def forward(self,
+                x: torch.Tensor,
+                cov: Optional[torch.Tensor] = None,
+                compute_power: bool = True,
+                output_handle=None,
+                meminfo: Optional[str] = None,
+                manage_quanter: bool = True):
         if manage_quanter:
             self.quant()
         assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
         if self.input_bias:
             x += self.bias[None, :, :, :]
 
-        data = self.init_memse_dict(x, compute_power)
+        data = self.init_memse_dict(x, cov, compute_power)
         data['P_tot'].extra_info = 'Power accumulator'
+        self.power_accum.reset()
+        
         for idx, s in enumerate(net_param_iterator(self.model)):
             if hasattr(s, 'memse'):
                 s.memse(s, data)
             else:
                 SUPPORTED_OPS.get(type(s), NOOP)(s, data)
+            
+            self.power_accum.update(torch.mean(data['P_tot']).item())
             if meminfo == 'cpu' or meminfo == 'gpu':
                 gc.collect()
                 print('Layer', idx, '(', s, ')')
@@ -118,10 +129,16 @@ class MemSE(nn.Module):
         self.unquant()
         return out.flatten(start_dim=1)
 
-    def no_power_forward(self, x, meminfo: Optional[str] = None, **kwargs):
-        return self.forward(x, False, meminfo=meminfo, **kwargs)
+    def no_power_forward(self, x: torch.Tensor, meminfo: Optional[str] = None, **kwargs):
+        return self.forward(x, compute_power=False, meminfo=meminfo, **kwargs)
 
-    def mse_forward(self, x, reps: int = 1000, compute_power: bool = True, compute_cov: bool = False, output_handle = None):
+    def mse_forward(self,
+                    x: torch.Tensor,
+                    cov: Optional[torch.Tensor] = None,
+                    reps: int = 1000,
+                    compute_power: bool = True,
+                    compute_cov: bool = False,
+                    output_handle = None):
         reps = int(reps)
         if self.input_bias:
             x += self.bias[None, :, :, :]
@@ -149,7 +166,7 @@ class MemSE(nn.Module):
         varis = {'sim': {}, 'us': {}}
         covs = {'sim': {}, 'us': {}}
 
-        data = self.init_memse_dict(x, compute_power)
+        data = self.init_memse_dict(x, cov, compute_power)
         for idx, s in enumerate(net_param_iterator(self.model)):
             SUPPORTED_OPS.get(type(s), NOOP)(s, data)
             if type(s) not in SUPPORTED_OPS:
@@ -188,11 +205,11 @@ class MemSE(nn.Module):
                         self.plot_gamma(us_ - sim_, output_handle, f'{type(s)} US - SIM', idx)
         return mses, means, varis, covs
 
-    def init_memse_dict(self, x: torch.Tensor, compute_power: bool):
+    def init_memse_dict(self, x: torch.Tensor, cov: Optional[torch.Tensor], compute_power: bool):
         data = {
             'mu': x,
-            'gamma_shape': [*x.shape, *x.shape[1:]],
-            'gamma': torch.zeros(0, device=x.device, dtype=x.dtype),
+            'gamma_shape': [*x.shape, *x.shape[1:]] if cov is None else None,
+            'gamma': torch.zeros(0, device=x.device, dtype=x.dtype) if cov is None else cov,
             'P_tot': torch.zeros(x.shape[0], device=x.device, dtype=x.dtype),
             'current_type': None,
             'compute_power': compute_power,
@@ -219,26 +236,29 @@ class MemSE(nn.Module):
         return self.model(x)
 
     def plot_gamma(self, gamma, output_handle, current_type, idx, per_sample=False):
+        fig_name = f'{idx}th layer ({current_type})'
         if output_handle == 'density':
             plt.figure(figsize=(12,4), facecolor='white')
             reshaped = gamma.detach().cpu().reshape(gamma.shape[0], -1).numpy()
             plt.hist([r.flatten() for r in reshaped], bins=25, density=True, label=list(range(gamma.shape[0])))
-            plt.title(f'{idx}th layer ({current_type})')
+            plt.title(fig_name)
             plt.yscale('log')
             plt.legend()
             plt.show()
         elif output_handle == 'imshow':
             if gamma.shape[0] > 1:
                 fig, axs = plt.subplots(gamma.shape[0], figsize=(15,15), sharex=True, facecolor='white')
-                fig.suptitle(f'{idx}th layer ({current_type})')
+                fig.suptitle(fig_name)
                 for img_idx in range(gamma.shape[0]):
                     reshaped = gamma[img_idx].detach().cpu().reshape(int(math.sqrt(gamma[img_idx].numel())), -1)
                     hdle = axs[img_idx].matshow(reshaped)
                 #fig.colorbar(hdle, ax=axs.ravel().tolist())
                 plt.show()
-            else:
+            elif gamma.numel() > 1:
                 plt.matshow(gamma[0].detach().cpu().reshape(int(math.sqrt(gamma[0].numel())), -1))
                 plt.show()
+            else:
+                print(f'Gamma full of zeros {fig_name}')
         #maxi = gamma.reshape(gamma.shape[0], -1).max(dim=1).values
         #mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
         #self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
@@ -247,20 +267,7 @@ class MemSE(nn.Module):
     def post_process_gamma(self, gamma):
         if self.post_processing == 'zero_but_diag':
             zero_but_diag_(gamma)
-        
 
-def count_parameters(model):
-    table = PrettyTable(["Modules", "Parameters", "Mean"])
-    total_params = 0
-    for name, parameter in model.named_parameters():
-        if not parameter.requires_grad:
-            continue
-        param = parameter.numel()
-        table.add_row([name, param, parameter.mean().detach().cpu().item()])
-        total_params += param
-    print(table)
-    print(f"Total Trainable Params: {total_params}")
-    return total_params
 
 def solve_p_mse(model, device, dataloader, Gmax, sigma, r, N, mode, reduce:bool=True):
     quanter = MemristorQuant(model, N = N, wmax_mode=mode, Gmax=Gmax, std_noise = sigma)

@@ -32,7 +32,6 @@ class MemSEAct:
         sigma_2 = sigma_2.view(*mu.shape)
         assert sigma_2.numel() == mu.numel()
 
-        #TODO update gamma, prepare derivatives, store and pass them around as needed
         d_mu = cls.derivatives(module, data, mu)
         ga_r = oe.contract(einsum_expr,d_mu[1],d_mu[1],gamma)
         cls.gamma_extra_update(module, data, ga_r, d_mu)

@@ -6,6 +6,7 @@ __all__ = ['net_param_iterator']
 
 
 def net_param_iterator(model: nn.Module) -> Iterator:
+    # TODO use torch fx to replace the graph elements and perform regular forward
     ignored = []
     for _, module in model.named_modules():
         if type(module) in SUPPORTED_OPS.keys() or hasattr(module, 'memse'):

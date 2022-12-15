@@ -294,6 +294,8 @@ class MemristorQuant(object):
 
 	@torch.no_grad()
 	def update_w_max(self) -> None:
+		if len(self.crossbars) == 0:
+			return
 		res = [t.update_w_max(self.wmax_mode) for t in self.crossbars]
 		if self.wmax_mode == WMAX_MODE.ALL:
 			res = max(res)

@@ -10,7 +10,7 @@ from .op import conv2duf_op
 from .utils import double_conv, gamma_to_diag
 
 class Conv2DUF(nn.Module):
-    def __init__(self, conv, input_shape, output_shape):
+    def __init__(self, conv: nn.Conv2d, input_shape, output_shape):
         super().__init__()
         assert len(output_shape) == 3, f'chw or cwh with no batch dim ({output_shape})'
         self.original_conv_weight_shape = conv.weight.shape
