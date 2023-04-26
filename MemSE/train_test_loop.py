@@ -1,6 +1,6 @@
 import gc
 import time
-from typing import List, Tuple, Optional
+from typing import Callable, List, Tuple, Optional
 import torch
 from torch.utils import data
 from MemSE import MemSE
@@ -73,7 +73,8 @@ def test_mse_th(testloader: data.DataLoader,
                 device=None,
                 batch_stop: int = -1,
                 memory_flush:bool=True,
-                print_freq:Optional[int]=None) -> Tuple[float, float]:
+                print_freq:Optional[int]=None,
+                gamma_post_processing:Optional[Callable] = None) -> Tuple[float, float]:
     assert testloader.__output_loader is True
     data_time = AverageMeter('Data time', ':6.3f')
     model_time = AverageMeter('Model time', ':6.3f')
@@ -92,7 +93,7 @@ def test_mse_th(testloader: data.DataLoader,
         end_ = time.time()
         
         inputs, targets = inputs.to(device, non_blocking=True), targets.to(device, non_blocking=True)
-        mu, gamma, p_tot = model.forward(inputs, manage_quanter=False)
+        mu, gamma, p_tot = model.forward(inputs, manage_quanter=False, post_processing=gamma_post_processing)
         model_time.update(time.time() - end_)
         end_ = time.time()
         

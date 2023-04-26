@@ -159,3 +159,53 @@ class Conv2DUF(nn.Module):
         e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) /  r, dim=(1,2,3))
         e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) /  r, dim=(1,2,3))
         return e_p_mem + e_p_tiap + e_p_tiam
+    
+    @staticmethod
+    def memse_montecarlo(conv2duf: Conv2DUF, memse_dict):
+        ct = conv2duf.Gmax / conv2duf.Wmax
+        noise, noised = conv2duf._crossbar.noise_montecarlo()
+        memse_dict['P_tot'] += conv2duf.energy_montecarlo(conv2duf, 
+                                                          memse_dict['mu'],
+                                                          c=ct,
+                                                          w=conv2duf.original_weight,
+                                                          b=conv2duf.bias,
+                                                          w_noise=noise['weight'].reshape(conv2duf.original_conv_weight_shape),
+                                                          b_noise=noise['bias'],
+                                                          r=memse_dict['r'])
+        memse_dict['current_type'] = 'Conv2DUF'
+        memse_dict['mu'] = conv2duf.forward(memse_dict['mu'], weight=noised['weight'].reshape(conv2duf.original_conv_weight_shape), bias=noised['bias'])
+    
+    @staticmethod
+    def energy_montecarlo(conv2duf: Conv2DUF,
+                          x: TensorType["batch", "channel_in", "width", "height"],
+                          c: TensorType["channel_out"],
+                          w: TensorType["channel_out", "channel_in", "width", "height"],
+                          b: TensorType["channel_out"],
+                          w_noise: TensorType["channel_out", "channel_in", "width", "height"],
+                          b_noise: TensorType["channel_out"],
+                          r):
+        sum_x_gd: torch.Tensor = x ** 2
+        abs_w: torch.Tensor = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
+        if b is not None:
+            sign_b = torch.sign(b)
+            abs_b = oe.contract('c,c->c', torch.abs(b), c).to(sum_x_gd) 
+            abs_b_n = abs_b + b_noise
+            abs_b_n *= sign_b
+            Bpos = torch.clip(abs_b_n, min=0)
+            Bneg = torch.clip(-abs_b_n, min=0)
+        else:
+            abs_b = Bpos = Bneg = None
+        e_p_mem: torch.Tensor = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **conv2duf.conv_property_dict), dim=(1,2,3))
+
+        sign_w = torch.sign(w)
+        abs_w += w_noise
+        abs_w *= sign_w
+        Gpos = torch.clip(abs_w, min=0)
+        Gneg = torch.clip(-abs_w, min=0)
+        
+        zp_mu = torch.nn.functional.conv2d(x, Gpos, Bpos) * r
+        zm_mu = torch.nn.functional.conv2d(x, Gneg, Bneg) * r
+
+        e_p_tiap = torch.sum((zp_mu ** 2) /  r, dim=(1,2,3))
+        e_p_tiam = torch.sum((zm_mu ** 2) /  r, dim=(1,2,3))
+        return e_p_mem + e_p_tiap + e_p_tiam

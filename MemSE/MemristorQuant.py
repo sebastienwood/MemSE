@@ -1,17 +1,20 @@
 import torch
 import torch.nn as nn
+from collections import defaultdict
 from MemSE.definitions import WMAX_MODE
 from MemSE.nn.definitions import TYPES_HANDLED
 from MemSE.utils import default, torchize
 
-from typing import Union
+from typing import Tuple, Union
 
 __all__ = ['MemristorQuant']
 
 
 class CrossBar(object):
-	def __init__(self, module: nn.Module) -> None:
+	def __init__(self, module: nn.Module, manager) -> None:
 		self.module = module
+		self.manager = manager
+		module._crossbar = self
 		self.quanted, self.noised, self.c_one = False, False, False
 		existing_k = [k for k in TYPES_HANDLED[type(module)] if hasattr(module, k) and getattr(module, k) is not None]
 		self.tensors = {k:getattr(module,k) for k in existing_k}
@@ -108,13 +111,21 @@ class CrossBar(object):
 
 	def renoise(self, std_noise: float):
 		assert self.quanted, 'Cannot renoise the original representation'
+		noise = defaultdict(lambda: None)
 		for k in self.tensors.keys():
-			self.tensors[k].data.copy_(self.intermediate_tensors[k])
-			shape, device = self.tensors[k].shape, self.tensors[k].device
-			self.tensors[k].data += torch.normal(mean=0., std=std_noise, size=shape, device=device)
-			self.tensors[k].data -= torch.normal(mean=0., std=std_noise, size=shape, device=device)
+			noise[k] = self._renoise(self.tensors[k], self.intermediate_tensors[k], std_noise)
 		self.rescale()
 		self.noised = True
+		return noise
+
+	def _renoise(self, tensor: torch.Tensor, intermediate_tensor: torch.Tensor, std_noise: float):
+		sign = torch.sign(intermediate_tensor)
+		tensor.data.copy_(torch.abs(intermediate_tensor))
+		shape, device = tensor.shape, tensor.device
+		noise = torch.normal(mean=0., std=std_noise, size=shape, device=device) - torch.normal(mean=0., std=std_noise, size=shape, device=device)
+		tensor.data += noise
+		tensor.data *= sign
+		return noise
 
 	def denoise(self):
 		assert self.quanted, 'Cannot renoise the original representation'
@@ -127,6 +138,14 @@ class CrossBar(object):
 		for v in self.tensors.values():
 			inp_shape = 'i' if len(v.shape) == 1 else 'ij'
 			v.data.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', v.data, 1/self.c))
+
+	def noise_montecarlo(self) -> Tuple[dict, dict]:
+		noise = self.renoise(self.manager.std_noise)
+		noised = defaultdict(lambda: None)
+		for k in self.tensors.keys():
+			noised[k] = self.tensors[k].clone()
+		self.denoise()
+		return noise, noised
 
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:

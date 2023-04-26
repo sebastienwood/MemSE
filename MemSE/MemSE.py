@@ -1,6 +1,6 @@
 import gc
 import math
-from typing import Optional
+from typing import Optional, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,14 +31,12 @@ class MemSE(nn.Module):
                  Gmax_init_Wmax: bool=False,
                  input_bias: bool=False,
                  input_shape=None,
-                 taylor_order: int=2,
-                 post_processing=None):
+                 taylor_order: int=2):
         super(MemSE, self).__init__()
         self.model = model
         self.quanter = quanter
         self.r = r
         self.taylor_order = taylor_order
-        self.post_processing = post_processing
         if r != 1:
             raise ValueError('Cannot work !')
         if taylor_order < 1:
@@ -80,7 +78,8 @@ class MemSE(nn.Module):
                 compute_power: bool = True,
                 output_handle=None,
                 meminfo: Optional[str] = None,
-                manage_quanter: bool = True):
+                manage_quanter: bool = True,
+                post_processing: Optional[Callable] = None):
         if manage_quanter:
             self.quant()
         assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
@@ -103,7 +102,8 @@ class MemSE(nn.Module):
                 print('Layer', idx, '(', s, ')')
                 memory_report(False if meminfo == 'cpu' else True, 10)
             self.plot_gamma(data['gamma'], output_handle, data['current_type'], idx)
-            self.post_process_gamma(data['gamma'])
+            if post_processing is not None:
+                post_processing(data['gamma'])
 
         if len(data['mu'].shape) != 2:
             data['mu'] = data['mu'].reshape(data['mu'].shape[0], -1)
@@ -263,10 +263,6 @@ class MemSE(nn.Module):
         #mini = gamma.reshape(gamma.shape[0], -1).min(dim=1).values
         #self._var_batch[idx] = (maxi-mini).detach().cpu().tolist()
         #self._var_batch[idx] = gamma.reshape(gamma.shape[0], -1).var(dim=1).detach().cpu().tolist()
-    
-    def post_process_gamma(self, gamma):
-        if self.post_processing == 'zero_but_diag':
-            zero_but_diag_(gamma)
 
 
 def solve_p_mse(model, device, dataloader, Gmax, sigma, r, N, mode, reduce:bool=True):
