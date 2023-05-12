@@ -9,10 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 
-from MemSE.definitions import SUPPORTED_OPS
 from MemSE.MemristorQuant import MemristorQuant
 from MemSE.fx import (get_intermediates,
-                      net_param_iterator,
                       store_add_intermediates_mse,
                       store_add_intermediates_var)
 from MemSE.nn import mse_gamma, zero_but_diag_, zero_diag
@@ -27,7 +25,6 @@ class MemSE(nn.Module):
     def __init__(self,
                  model: nn.Module,
                  quanter: MemristorQuant,
-                 r: float=1.,
                  Gmax_init_Wmax: bool=False,
                  input_bias: bool=False,
                  input_shape=None,
@@ -35,10 +32,7 @@ class MemSE(nn.Module):
         super(MemSE, self).__init__()
         self.model = model
         self.quanter = quanter
-        self.r = r
         self.taylor_order = taylor_order
-        if r != 1:
-            raise ValueError('Cannot work !')
         if taylor_order < 1:
             raise ValueError('Taylor approx needs to be at least of order 1')
 
@@ -71,6 +65,10 @@ class MemSE(nn.Module):
     @property
     def sigma(self) -> float:
         return self.quanter.std_noise
+    
+    @property
+    def tia_resistance(self) -> float:
+        return self.quanter.tia_resistance
 
     def forward(self,
                 x: torch.Tensor,

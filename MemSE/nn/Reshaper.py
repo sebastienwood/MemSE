@@ -4,39 +4,38 @@ from typing import Iterable
 import torch
 import torch.nn as nn
 
-__all__ = ['Reshaper', 'Flattener']
-# TODO called in network manipulations, perform the base padding on mu and on gamma if it is provided, to add in SUPPORTED_OPS + remove management from Linear
-# TODO same for reshape
-# TODO same for flatten
+from MemSE.nn.base_layer import MemSELayer, MemSEReturn
 
-class Reshaper(nn.Module):
-    def __init__(self, shape: Iterable[int]) -> None:
-        super().__init__()
+__all__ = ['Reshaper', 'Flattener']
+
+
+class Reshaper(MemSELayer):
+    def initialize_from_module(self, shape: Iterable[int]) -> None:
         self.shape = shape
-        
-    def forward(self, x):
+ 
+    def functional_base(self, x, *args, **kwargs):
         return torch.reshape(x, (-1,) + self.shape)
-    
-    @staticmethod
-    def memse(reshaper: Reshaper, memse_dict):
-        pad_mu = reshaper.forward(memse_dict['mu'])
-        gamma, gamma_shape = memse_dict['gamma'], memse_dict['gamma_shape']
+
+    def memse(self, previous_layer:MemSEReturn, *args, **kwargs):
+        x = previous_layer.out
+        gamma = previous_layer.gamma
+        gamma_shape = previous_layer.gamma_shape
+        power = previous_layer.power
+
+        x = self.functional_base(x)
         if gamma_shape is not None:
-            pad_gamma_shape = pad_mu.shape + pad_mu.shape[1:]
+            pad_gamma_shape = x.shape + x.shape[1:]
             pad_gamma = gamma
         else:
             pad_gamma_shape = gamma_shape
-            pad_gamma = torch.reshape(gamma, pad_mu.shape + pad_mu.shape[1:])
+            pad_gamma = torch.reshape(gamma, x.shape + x.shape[1:])
         pad_gamma.extra_info = 'Gamma out of reshaper'
-        memse_dict['current_type'] = reshaper.__class__.__name__
-        memse_dict['mu'] = pad_mu
-        memse_dict['gamma'] = pad_gamma
-        memse_dict['gamma_shape'] = pad_gamma_shape
-        
+        return MemSEReturn(x, pad_gamma, pad_gamma_shape, power)
+
 
 class Flattener(Reshaper):
-    def __init__(self) -> None:
-        nn.Module.__init__(self)
-        
-    def forward(self, x):
+    def initialize_from_module(self) -> None:
+        pass
+
+    def functional_base(self, x, *args, **kwargs):
         return torch.flatten(x, start_dim=1)

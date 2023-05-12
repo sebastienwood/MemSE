@@ -1,5 +1,6 @@
 import torch
 
+
 __all__ = ['fuse_conv_bn']
 
 def resnet_layer_fusion_generator(layer_idx, downsample: bool):

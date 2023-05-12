@@ -2,17 +2,20 @@ from __future__ import annotations
 import math
 import torch
 import torch.nn as nn
-import numpy as np
 import opt_einsum as oe
 from torchtyping import TensorType
 
-from MemSE.nn import MemSELayer
+from MemSE.nn.base_layer.MemSELayer import MemSELayer, MemSEReturn
+from MemSE.nn.map import register_memse_mapping
 
-from .op import conv2duf_op
-from .utils import double_conv, gamma_to_diag
+from .op import conv2duf_op, double_conv
+from .utils import gamma_to_diag
 
+
+@register_memse_mapping()
 class Conv2DUF(MemSELayer):
     def initialize_from_module(self, conv: nn.Conv2d):
+        assert isinstance(conv, nn.Conv2d)
         self.original_conv_weight_shape = conv.weight.shape
         for k in ['kernel_size', 'padding', 'dilation', 'groups', 'stride', 'output_padding', 'padding_mode', 'in_channels', 'out_channels']:
             setattr(self, k, getattr(conv, k))
@@ -42,6 +45,11 @@ class Conv2DUF(MemSELayer):
 
     def functional_base(self, x, weight=None, bias=None):
         return torch.nn.functional.conv2d(x, self.original_weight if weight is None else weight, bias=self.bias if bias is None else bias, **self.conv_property_dict)
+    
+    @classmethod
+    @property
+    def dropin_for(cls):
+        return set([nn.Conv2d])
 
     @property
     def original_weight(self) -> torch.Tensor:
@@ -59,79 +67,73 @@ class Conv2DUF(MemSELayer):
             'dilation': self.dilation,
             'groups': self.groups
         }
-        
+
     @property
     def memristored(self):
-        return [self.weight, self.bias]
+        return {'weight': self.weight, 'bias': self.bias}
     
     @property
     def memristored_einsum(self) -> dict:
         return {
-            self.weight: 'coij,c->coij',
-            self.bias: 'c,c->c',
+            'weight': 'coij,c->coij',
+            'bias': 'c,c->c',
             'out': 'coij,c->coij'
         }
 
     def unfold_input(self, x):
         return nn.functional.unfold(x, self.kernel_size, self.dilation, self.padding, self.stride)
 
-    @staticmethod
-    def memse(conv2duf: Conv2DUF, memse_dict):
-        mu, gamma, gamma_shape = memse_dict['mu'], memse_dict['gamma'], memse_dict['gamma_shape']
-        ct = conv2duf.Gmax / conv2duf.Wmax  # Only one column at most (vector of weights)
+    def memse(self, previous_layer:MemSEReturn, *args, **kwargs):
+        x = previous_layer.out
+        gamma = previous_layer.gamma
+        gamma_shape = previous_layer.gamma_shape
+        power = previous_layer.power
+        
+        ct = self.Gmax / self.Wmax  # Only one column at most (vector of weights)
         ct_sq = ct ** 2
         if ct.dim() == 0:
-            ct = ct.repeat(conv2duf.original_weight.shape[0]).to(mu)
-            ct_sq = ct_sq.repeat(conv2duf.original_weight.shape[0]).to(mu)
+            ct = ct.repeat(self.original_weight.shape[0]).to(x)
+            ct_sq = ct_sq.repeat(self.original_weight.shape[0]).to(x)
 
         # TODO if compute power
         # dominated by memory accesses
         #  - fused kernel for all convolutions (+, -, n) using triton template (good perf)
         #  - fused kernel for mse_var (same same)
-        if memse_dict['compute_power']:
-            P_tot = conv2duf.energy(conv2duf,
-                                    x=mu,
-                                    gamma=gamma,
-                                    gamma_shape=gamma_shape,
-                                    c=ct,
-                                    w=conv2duf.original_weight,
-                                    b=conv2duf.bias,
-                                    r=memse_dict['r'],
-                                    sigma=memse_dict['sigma'])
-        else:
-            P_tot = 0.
+        if power:
+            P_tot = self.energy(x=x,
+                                gamma=gamma,
+                                gamma_shape=gamma_shape,
+                                c=ct,
+                                w=self.original_weight,
+                                b=self.bias,
+                                r=self.tia_resistance,
+                                sigma=self.std_noise)
+            power.add_(P_tot)
 
-        mu, gamma, gamma_shape = conv2duf.mse_var(conv2duf,
-                                                  mu,
-                                                  gamma,
-                                                  gamma_shape,
-                                                  memse_dict['r'],
-                                                  (memse_dict['sigma'] * math.sqrt(2)) ** 2 / ct_sq,
-                                                  weights=conv2duf.original_weight,
-                                                  bias=conv2duf.bias
-                                                  )
+        mu, gamma, gamma_shape = self.mse_var(x,
+                                              gamma,
+                                              gamma_shape,
+                                              self.tia_resistance,
+                                              (self.std_noise * math.sqrt(2)) ** 2 / ct_sq,
+                                              weights=self.original_weight,
+                                              bias=self.bias
+                                              )
 
-        memse_dict['P_tot'] += P_tot
-        memse_dict['current_type'] = 'Conv2DUF'
-        memse_dict['mu'] = mu
-        memse_dict['gamma'] = gamma
-        memse_dict['gamma_shape'] = gamma_shape
+        return MemSEReturn(mu, gamma, gamma_shape, power)
 
-    @staticmethod
-    def mse_var(conv2duf: Conv2DUF, input, gamma, gamma_shape, r, c0, weights, bias):
-        mu = conv2duf.forward(input, weights, bias) * r
+    def mse_var(self, input, gamma, gamma_shape, r, c0, weights, bias):
+        mu = self.functional_base(input, weights, bias) * r
 
         # TODO
         # gamma only diag kernels at the end
         if gamma_shape is None:
-            gamma_n = double_conv(gamma, weights, **conv2duf.conv_property_dict)
+            gamma_n = double_conv(gamma, weights, **self.conv_property_dict)
         else:
             gamma_n = torch.zeros(mu.shape + mu.shape[1:], device=mu.device, dtype=gamma.dtype)
-        gamma_n = conv2duf_op(gamma_n, gamma, gamma_shape, input, c0, weight_shape=weights.shape, bias=bias, **conv2duf.conv_property_dict) * r ** 2
+        gamma_n = conv2duf_op(gamma_n, gamma, gamma_shape, input, c0, weight_shape=weights.shape, bias=bias, **self.conv_property_dict) * r ** 2
         return mu, gamma_n, None
 
-    @staticmethod
-    def energy(conv2duf: Conv2DUF,
+    def energy(self,
                x: TensorType["batch", "channel_in", "width", "height"],
                gamma: TensorType["batch", "channel_in", "width", "height", "channel_in", "width", "height"],
                gamma_shape,
@@ -150,48 +152,13 @@ class Conv2DUF(MemSELayer):
             Bneg = torch.clip(-b, min=0)
         else:
             abs_b = Bpos = Bneg = None
-        e_p_mem: torch.Tensor = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **conv2duf.conv_property_dict), dim=(1,2,3))
+        e_p_mem: torch.Tensor = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **self.conv_property_dict), dim=(1,2,3))
 
         Gpos = torch.clip(w, min=0)
         Gneg = torch.clip(-w, min=0)
-        zp_mu, zp_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, (sigma/c) ** 2, Gpos, Bpos)
-        zm_mu, zm_g, _ = conv2duf.mse_var(conv2duf, x, gamma, gamma_shape, r, (sigma/c) ** 2, Gneg, Bneg)
+        zp_mu, zp_g, _ = self.mse_var(x, gamma, gamma_shape, r, (sigma/c) ** 2, Gpos, Bpos)
+        zm_mu, zm_g, _ = self.mse_var(x, gamma, gamma_shape, r, (sigma/c) ** 2, Gneg, Bneg)
 
-        e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) /  r, dim=(1,2,3))
-        e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) /  r, dim=(1,2,3))
+        e_p_tiap = torch.sum((zp_mu ** 2 + gamma_to_diag(zp_g)) / r, dim=(1,2,3))
+        e_p_tiam = torch.sum((zm_mu ** 2 + gamma_to_diag(zm_g)) / r, dim=(1,2,3))
         return e_p_mem + e_p_tiap + e_p_tiam
-    
-    @staticmethod
-    def memse_montecarlo(conv2duf: Conv2DUF, memse_dict):
-        ct = conv2duf.Gmax / conv2duf.Wmax
-        
-        w_noise = torch.normal(mean=0., std=conv2duf._crossbar.manager.std_noise, size=conv2duf.original_conv_weight_shape, device=conv2duf.weight.device)
-        w_noise_n = torch.normal(mean=0., std=conv2duf._crossbar.manager.std_noise, size=conv2duf.original_conv_weight_shape, device=conv2duf.weight.device)
-        sign_w = torch.sign(conv2duf.original_weight)
-        abs_w: torch.Tensor = oe.contract('coij,c->coij', torch.abs(conv2duf.original_weight), ct).to(conv2duf.weight)
-        Gpos = torch.clip(torch.where(sign_w > 0, abs_w, 0.) + w_noise, min=0)
-        Gneg = torch.clip(torch.where(sign_w < 0, abs_w, 0.) + w_noise_n, min=0)
-        
-        if conv2duf.bias is not None:
-            b_noise = torch.normal(mean=0., std=conv2duf._crossbar.manager.std_noise, size=conv2duf.bias.shape, device=conv2duf.bias.device)
-            b_noise_n = torch.normal(mean=0., std=conv2duf._crossbar.manager.std_noise, size=conv2duf.bias.shape, device=conv2duf.bias.device)
-            sign_b = torch.sign(conv2duf.bias)
-            abs_b = oe.contract('c,c->c', torch.abs(conv2duf.bias), ct).to(conv2duf.weight) 
-            Bpos = torch.clip(torch.where(sign_b > 0, abs_b, 0.) + b_noise, min=0)
-            Bneg = torch.clip(torch.where(sign_b < 0, abs_b, 0.) + b_noise_n, min=0)
-        else:
-            abs_b = Bpos = Bneg = None
-        
-        # PRECOMPUTE CONVS
-        zp_mu = torch.nn.functional.conv2d(memse_dict['mu'], Gpos, Bpos, **conv2duf.conv_property_dict)
-        zm_mu = torch.nn.functional.conv2d(memse_dict['mu'], Gneg, Bneg, **conv2duf.conv_property_dict)
-        
-        # ENERGY
-        sum_x_gd: torch.Tensor = memse_dict['mu'] ** 2
-        e_p_mem: torch.Tensor = torch.sum(torch.nn.functional.conv2d(sum_x_gd, abs_w, bias=abs_b, **conv2duf.conv_property_dict), dim=(1,2,3))
-        e_p_tiap = torch.sum(((zp_mu * memse_dict['r']) ** 2) /  memse_dict['r'], dim=(1,2,3))
-        e_p_tiam = torch.sum(((zm_mu * memse_dict['r']) ** 2) /  memse_dict['r'], dim=(1,2,3))
-        
-        memse_dict['P_tot'] += e_p_mem + e_p_tiap + e_p_tiam
-        memse_dict['current_type'] = 'Conv2DUF'
-        memse_dict['mu'] = memse_dict['r'] * (torch.einsum(f'coij,c -> coij', zp_mu, 1/ct) - torch.einsum(f'coij,c -> coij', zm_mu, 1/ct))

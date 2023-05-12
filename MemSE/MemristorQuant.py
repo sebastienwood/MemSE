@@ -1,158 +1,13 @@
 import torch
 import torch.nn as nn
-from collections import defaultdict
 from MemSE.definitions import WMAX_MODE
-from MemSE.nn.definitions import TYPES_HANDLED
 from MemSE.utils import default, torchize
+from MemSE.quant import CrossBar
 
-from typing import Tuple, Union
+from typing import Union
 
 __all__ = ['MemristorQuant']
 
-
-class CrossBar(object):
-	def __init__(self, module: nn.Module, manager) -> None:
-		self.module = module
-		self.manager = manager
-		module._crossbar = self
-		self.quanted, self.noised, self.c_one = False, False, False
-		existing_k = [k for k in TYPES_HANDLED[type(module)] if hasattr(module, k) and getattr(module, k) is not None]
-		self.tensors = {k:getattr(module,k) for k in existing_k}
-		for k, v in self.tensors.items():
-			v.extra_info = f'QParam {k} of {module.__class__.__name__}'
-		self.saved_tensors = {k:getattr(module,k).data.clone().cpu() for k in existing_k}
-		for k, v in self.saved_tensors.items():
-			v.extra_info = f'QParam (original) {k} of {module.__class__.__name__}'
-		self.intermediate_tensors = {}
-
-		module.register_buffer('Wmax', torch.tensor([0.] * module.out_features))
-		module.register_parameter('Gmax', nn.Parameter(torch.tensor([0.] * module.out_features)))
-
-	@property
-	def _unified_view(self):
-		if len(self.tensors) == 1:
-			return list(self.tensors.values())[0]
-		else:
-			return torch.cat(tuple(x if len(x.shape) == 2 else x.unsqueeze(1) for x in self.tensors.values()), dim=1)
-
-	@property
-	def out_features(self):
-		return self.module.out_features
-
-	@property
-	def Wmax(self):
-		if torch.all(self.module.Wmax == 0.):
-			raise ValueError('Wmax has probably not been init. correctly (value = 0)')
-		return self.module.Wmax
-
-	@Wmax.setter
-	def Wmax(self, val):
-		if isinstance(val, torch.Tensor) and val.numel() == self.module.Wmax.numel():
-			self.module.Wmax.data.copy_(val)
-		else:
-			self.module.Wmax.fill_(val)
-
-	@property
-	def Gmax(self):
-		if torch.all(self.module.Gmax == 0.):
-			raise ValueError('Gmax has probably not been init. correctly (value = 0)')
-		return self.module.Gmax
-
-	@Gmax.setter
-	def Gmax(self, val):
-		if isinstance(val, torch.Tensor) and val.numel() == self.module.Gmax.numel():
-			self.module.Gmax.data.copy_(val)
-		else:
-			self.module.Gmax.data.fill_(val)
-
-	@property
-	def c(self):
-		if self.c_one:
-			return torch.ones_like(self.Wmax)
-		return self.Gmax / self.Wmax
-
-	def info(self):
-		print(f'General info on Crossbar of {self.module.__class__.__name__}')
-		for k, v in self.tensors.items():
-			print(f'{k=} of shape {v.shape}')
-		print('-'*10)
-
-	def update_w_max(self, mode: WMAX_MODE):
-		if mode in [WMAX_MODE.LAYERWISE, WMAX_MODE.ALL]:
-			res = torch.max(torch.abs(self._unified_view))
-		elif mode == WMAX_MODE.COLUMNWISE:
-			res = torch.max(torch.abs(self._unified_view), dim=1).values
-		else:
-			raise ValueError("Not a valid WMAX_MODE")
-		self.Wmax = res
-		return res
-
-	def unquant(self):
-		if self.quanted:
-			for k in self.tensors.keys():
-				self.tensors[k].data.copy_(self.saved_tensors[k].to(self.tensors[k].data))
-			self.intermediate_tensors.clear()
-		self.quanted = False
-		self.noised = False
-
-	def quant(self, N: int, c_one: bool = False):
-		if self.quanted:
-			self.unquant()
-		self.c_one = c_one
-		for k in self.tensors.keys():
-			true_value = self.tensors[k].data
-			self.saved_tensors[k].copy_(true_value.clone().cpu())
-			self._quantize(true_value, N)
-			self.intermediate_tensors[k] = true_value.clone().cpu()
-			self.intermediate_tensors[k].extra_info = f'QParam (cache) {k} of {self.module.__class__.__name__}'
-			self.tensors[k].data.copy_(true_value)
-		self.rescale()
-		self.quanted = True
-
-	def renoise(self, std_noise: float):
-		assert self.quanted, 'Cannot renoise the original representation'
-		noise = defaultdict(lambda: None)
-		for k in self.tensors.keys():
-			noise[k] = self._renoise(self.tensors[k], self.intermediate_tensors[k], std_noise)
-		self.rescale()
-		self.noised = True
-		return noise
-
-	def _renoise(self, tensor: torch.Tensor, intermediate_tensor: torch.Tensor, std_noise: float):
-		sign = torch.sign(intermediate_tensor)
-		tensor.data.copy_(torch.abs(intermediate_tensor))
-		shape, device = tensor.shape, tensor.device
-		noise = torch.normal(mean=0., std=std_noise, size=shape, device=device) - torch.normal(mean=0., std=std_noise, size=shape, device=device)
-		tensor.data += noise
-		tensor.data *= sign
-		return noise
-
-	def denoise(self):
-		assert self.quanted, 'Cannot renoise the original representation'
-		for k in self.tensors.keys():
-			self.tensors[k].data.copy_(self.intermediate_tensors[k])
-		self.rescale()
-		self.noised = False
-
-	def rescale(self):
-		for v in self.tensors.values():
-			inp_shape = 'i' if len(v.shape) == 1 else 'ij'
-			v.data.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', v.data, 1/self.c))
-
-	def noise_montecarlo(self) -> Tuple[dict, dict]:
-		noise = self.renoise(self.manager.std_noise)
-		noised = defaultdict(lambda: None)
-		for k in self.tensors.keys():
-			noised[k] = self.tensors[k].clone()
-		self.denoise()
-		return noise, noised
-
-	@torch.no_grad()
-	def _quantize(self, tensor, N: int) -> None:
-		delta = self.Gmax / N if not self.c_one else self.Wmax / N
-		inp_shape = 'i' if len(tensor.shape) == 1 else 'ij'
-		tensor.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', torch.floor(torch.einsum(f'{inp_shape},i -> {inp_shape}', tensor, (self.c/delta))), delta))
-		
 
 class MemristorQuant(object):
 	def __init__(self,
@@ -160,19 +15,21 @@ class MemristorQuant(object):
 				 N: int = 128,
 				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.ALL,
 				 Gmax=0.1,
-				 std_noise:float=1.) -> None:
+				 std_noise:float=1.,
+     			 tia_resistance:float=1.) -> None:
 		super().__init__()
-		self.model = model
-		model.__attached_memquant = self
 		self.quanted = False
 		self.noised = False
 		self.N = N
 		self.std_noise = std_noise
+		self.tia_resistance = tia_resistance
 		Gmax = default(Gmax, 0.1)
 		self.crossbars = []
 		for m in model.modules():
-			if type(m) in TYPES_HANDLED.keys():
-				self.crossbars.append(CrossBar(m))
+			for att in vars(m):
+				if isinstance(att, CrossBar):
+					self.crossbars.append(att)
+					att.manager = self
 		self.init_wmax(wmax_mode)
 		self.init_gmax(Gmax)
 
@@ -230,16 +87,6 @@ class MemristorQuant(object):
 
 	def __del__(self):
 		self.unquant()
-
-	def forward(self, input):
-		# WARNING: do not use this forward for learning, it does 2 forward with 1 batch
-		#res_reliable = self.model(input).detach()
-		#self.quant()
-		self.renoise()
-		res = self.model(input)
-		#self.unquant()
-		#self.MSE = torch.mean(torch.square(res - res_reliable))
-		return res
 
 	def init_gmax(self, Gmax):
 		Gmax = torchize(Gmax)

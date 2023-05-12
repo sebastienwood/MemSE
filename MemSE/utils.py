@@ -1,12 +1,9 @@
-from typing import Optional, Tuple
+from typing import Optional
 import torch
-import torch.nn as nn
 import numpy as np
 import gc
 import sys
 import random
-
-from MemSE.nn import Conv2DUF
 
 def maybe_cuda_from_numpy(tensor, device_id=0, dtype=None, use_cuda:bool=False):
 	if type(tensor) is np.ndarray:
@@ -21,15 +18,6 @@ def print_compare(original, other):
 	print(other.shape)
 	print(mse(original, other))
 	assert np.allclose(original, other), 'diff'
-
-
-def n_vars_computation(model: nn.Module) -> Tuple[int, int]:
-	n_vars_column, n_vars_layer = 0, 0
-	for _, module in model.named_modules():
-		if isinstance(module, nn.Linear) or isinstance(module, Conv2DUF):
-			n_vars_column += module.out_features#[0]
-			n_vars_layer += 1
-	return n_vars_column, n_vars_layer
 
 
 def memory_debug(cuda_profile:bool=True) -> list:
@@ -107,6 +95,13 @@ def listify(val):
 		return val
 	else:
 		return [val]
+
+
+def realize_tuple(mbe_tuple, size):
+	if isinstance(mbe_tuple, tuple):
+		return mbe_tuple
+	else:
+		return (mbe_tuple,) * size
 
 
 def numpify(val: torch.Tensor):

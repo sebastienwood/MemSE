@@ -1,10 +1,15 @@
 import copy
+
 import torch
 import torch.nn as nn
+
+
 from MemSE.fx.Conv2d import build_sequential_unfolded, build_sequential_linear
 from MemSE.fx.Linear import fuse_linear_bias
+
 from MemSE.fx.trace import record_shapes
-from MemSE.utils import count_parameters, listify
+
+from MemSE.utils import count_parameters
 from MemSE.fx.conv_decompositions import tucker_decomposition_conv_layer
 
 __all__ = ['conv_to_fc', 'conv_to_unfolded']

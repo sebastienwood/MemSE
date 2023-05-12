@@ -42,7 +42,7 @@ def store_add_intermediates_mse(model, reps):
 
 
 def store_add_intermediates_var(model, reps, compute_cov: bool = False):
-    # TODO unbiased var estimates suggest we should have (reps - 1), it was debated 
+    # TODO unbiased var estimates suggest we should have (reps - 1), it was debated
     hooks = {}
     @torch.no_grad()
     def hook_fn(self, input, output):

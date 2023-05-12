@@ -1,8 +1,10 @@
 import math
+from typing import Callable
 import torch
-from MemSE.nn.MemSEAct import MemSEAct
+from MemSE.nn.base_layer.MemSEAct import MemSEAct
 
 from MemSE.nn.utils import diagonal_replace
+from MemSE.nn.map import register_memse_mapping
 
 
 DENOM = math.sqrt(2 * math.pi)
@@ -36,8 +38,8 @@ def relu(module, data):
     data['mu'] = mu_p
     data['gamma'] = ga_r
     data['gamma_shape'] = gamma_shape
-    
-    
+
+
 @torch.jit.script
 def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=SQRT_2):
     sigma = torch.sqrt(sigma_2)
@@ -60,17 +62,25 @@ def f(mu: torch.Tensor, sigma_2: torch.Tensor, DENOM:float=DENOM, SQRT_2:float=S
     gamma_p = torch.where(sigma > 0, gamma_p, torch.tensor(0., dtype=sigma.dtype, device=sigma.device))
 
     return mu_p, gamma_p
-    
 
+
+@register_memse_mapping()
 class ReLU_(MemSEAct):
     __type__ = 'ReLU'
-    @staticmethod
-    def main(module, data, mu, sigma_2, *args, **kwargs):
-        return f(mu, sigma_2)
 
     @classmethod
-    def derivatives(cls, module, data, mu):
+    @property
+    def dropin_for(cls):
+        return set([torch.nn.ReLU])
+
+    def main(self, x, sigma_2, *args, **kwargs):
+        return f(x, sigma_2)
+
+    def derivatives(self, mu: torch.Tensor):
         return {1: (mu > 0) * 1.0}
+
+    def functional_base(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.relu(x)
 
 
 ReLU = ReLU_()
