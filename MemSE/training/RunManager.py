@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import torch
 import torch.nn as nn
+import MemSE.training.Dataloaders as dloader
 from MemSE.misc import AverageMeter
 
 
@@ -19,6 +20,28 @@ class RunManager:
             self.device = torch.device("cpu")
 
         self.run_config = run_config
+
+    def load_dataset(self):
+        # TODO parse dataset kwargs from run config
+        return dloader[self.run_config.dataset]()
+
+    @property
+    def train_loader(self):
+        if self._loader is None:
+            self._loader = self.load_dataset()
+        return self._loader['train_loader']
+
+    @property
+    def valid_loader(self):
+        if self._loader is None:
+            self._loader = self.load_dataset()
+        return self._loader['valid_loader']
+
+    @property
+    def test_loader(self):
+        if self._loader is None:
+            self._loader = self.load_dataset()
+        return self._loader['test_loader']
 
     def validate(
         self,
