@@ -56,6 +56,7 @@ class AccuracyDataset:
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
+                # TODO add memristors parameters to the sampling process
                 net_setting = ofa_network.sample_active_subnet()
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
@@ -73,8 +74,8 @@ class AccuracyDataset:
             for image_size in image_size_list:
                 # load val dataset into memory
                 val_dataset = []
-                run_manager.run_config.data_provider.assign_active_img_size(image_size)
-                for images, labels in run_manager.run_config.valid_loader:
+                run_manager._loader.assign_active_img_size(image_size)
+                for images, labels in run_manager.valid_loader:
                     val_dataset.append((images, labels))
                 # save path
                 os.makedirs(self.acc_src_folder, exist_ok=True)

@@ -99,7 +99,7 @@ class MemSELayer(nn.Module):
 
         # ENERGY
         sum_x_gd: torch.Tensor = previous_layer.out**2
-        
+
         e_p_mem: torch.Tensor = torch.sum(
             self.functional_base(sum_x_gd, *noisy[2]).view(sum_x_gd.shape[0], -1), dim=(1)
         )
