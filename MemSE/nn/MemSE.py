@@ -7,16 +7,16 @@ from MemSE import MemristorQuant
 
 
 class MemSE(nn.Module):
-    def __init__(self, model:nn.Module, opmap:dict, std_noise:Optional[float] = None, N:Optional[int] = None, *args, **kwargs) -> None:
+    def __init__(self, model:nn.Module, opmap:dict, std_noise:float = 0.001, N:int = 1e6, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.model = cast_to_memse(model, opmap)
-        self.quanter = MemristorQuant(self.model, std_noise=std_noise, N=N)
+        self.quanter = MemristorQuant(self.model, std_noise=std_noise, N=N, Gmax=10.)
 
     def forward(self, x):
         return self.model(x)
 
-    def quant(self):
-        self.quanter.quant()
+    def quant(self, c_one:bool = False):
+        self.quanter.quant(c_one=c_one)
 
     def unquant(self):
         self.quanter.unquant()

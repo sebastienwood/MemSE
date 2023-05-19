@@ -27,9 +27,10 @@ class MemristorQuant(object):
 		self.crossbars = []
 		for m in model.modules():
 			for att in vars(m):
-				if isinstance(att, CrossBar):
-					self.crossbars.append(att)
-					att.manager = self
+				if isinstance(getattr(m, att), CrossBar):
+					self.crossbars.append(getattr(m, att))
+					getattr(m, att).manager = self
+		assert len(self.crossbars) > 0
 		self.init_wmax(wmax_mode)
 		self.init_gmax(Gmax)
 

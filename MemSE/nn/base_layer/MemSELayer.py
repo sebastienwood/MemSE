@@ -99,21 +99,21 @@ class MemSELayer(nn.Module):
 
         # ENERGY
         sum_x_gd: torch.Tensor = previous_layer.out**2
+        
         e_p_mem: torch.Tensor = torch.sum(
-            self.functional_base(sum_x_gd, *noisy[2]), dim=(0), keepdim=True
+            self.functional_base(sum_x_gd, *noisy[2]).view(sum_x_gd.shape[0], -1), dim=(1)
         )
         e_p_tiap = torch.sum(
-            ((zp_mu * self.tia_resistance) ** 2) / self.tia_resistance,
-            dim=(0),
-            keepdim=True,
+            (((zp_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
+            dim=(1)
         )
         e_p_tiam = torch.sum(
-            ((zm_mu * self.tia_resistance) ** 2) / self.tia_resistance,
-            dim=(0),
-            keepdim=True,
+            (((zm_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
+            dim=(1)
         )
 
         previous_layer.power.add_(e_p_mem + e_p_tiap + e_p_tiam)
+
         return MontecarloReturn(
             out=self.tia_resistance
             * (
@@ -134,10 +134,21 @@ class MemSELayer(nn.Module):
     @property
     def memristored_einsum(self) -> dict:
         return {}
+    
+    @property
+    def memristored_real_shape(self) -> dict:
+        """Overwrite the access method for the memristored keys if usage is different in Pytorch than the Memristor representation stored in the crossbar.
+
+        Returns:
+            dict: _description_
+        """
+        return {}
 
     def get_noisy(self, ct):
         noisy = []
-        for i in self.memristored.values():
+        for k, i in self.memristored.items():
+            if k in self.memristored_real_shape:
+                i = self.memristored_real_shape[k]
             if i is None:
                 noisy.append((None,) * 3)
                 continue
@@ -149,7 +160,7 @@ class MemSELayer(nn.Module):
             )
             sign_w = torch.sign(i)
             abs_w: torch.Tensor = oe.contract(
-                self.memristored_einsum[i], torch.abs(i), ct
+                self.memristored_einsum[k], torch.abs(i), ct
             ).to(i)
             Gpos = torch.clip(torch.where(sign_w > 0, abs_w, 0.0) + w_noise, min=0)
             Gneg = torch.clip(torch.where(sign_w < 0, abs_w, 0.0) + w_noise_n, min=0)

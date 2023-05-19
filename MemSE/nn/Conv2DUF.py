@@ -25,7 +25,7 @@ class Conv2DUF(MemSELayer):
             self.register_parameter('bias', nn.Parameter(conv.bias.detach().clone()))
         else:
             self.bias = None
-            
+
     def extra_repr(self) -> str:
         s = ('{in_channels}, {out_channels}, kernel_size={kernel_size}'
              ', stride={stride}')
@@ -45,7 +45,7 @@ class Conv2DUF(MemSELayer):
 
     def functional_base(self, x, weight=None, bias=None):
         return torch.nn.functional.conv2d(x, self.original_weight if weight is None else weight, bias=self.bias if bias is None else bias, **self.conv_property_dict)
-    
+
     @classmethod
     @property
     def dropin_for(cls):
@@ -71,13 +71,19 @@ class Conv2DUF(MemSELayer):
     @property
     def memristored(self):
         return {'weight': self.weight, 'bias': self.bias}
-    
+
     @property
     def memristored_einsum(self) -> dict:
         return {
             'weight': 'coij,c->coij',
             'bias': 'c,c->c',
-            'out': 'coij,c->coij'
+            'out': 'bcij,c->bcij'
+        }
+
+    @property
+    def memristored_real_shape(self) -> dict:
+        return {
+            'weight': self.original_weight,
         }
 
     def unfold_input(self, x):
@@ -88,12 +94,12 @@ class Conv2DUF(MemSELayer):
         gamma = previous_layer.gamma
         gamma_shape = previous_layer.gamma_shape
         power = previous_layer.power
-        
+
         ct = self.Gmax / self.Wmax  # Only one column at most (vector of weights)
         ct_sq = ct ** 2
         if ct.dim() == 0:
-            ct = ct.repeat(self.original_weight.shape[0]).to(x)
-            ct_sq = ct_sq.repeat(self.original_weight.shape[0]).to(x)
+            ct = ct.repeat(self.out_features).to(x)
+            ct_sq = ct_sq.repeat(self.out_features).to(x)
 
         # TODO if compute power
         # dominated by memory accesses
@@ -147,7 +153,7 @@ class Conv2DUF(MemSELayer):
             sum_x_gd += gamma_to_diag(gamma)
         abs_w: torch.Tensor = oe.contract('coij,c->coij', torch.abs(w), c).to(sum_x_gd)
         if b is not None:
-            abs_b = oe.contract('c,c->c', torch.abs(b), c).to(sum_x_gd) 
+            abs_b = oe.contract('c,c->c', torch.abs(b), c).to(sum_x_gd)
             Bpos = torch.clip(b, min=0)
             Bneg = torch.clip(-b, min=0)
         else:

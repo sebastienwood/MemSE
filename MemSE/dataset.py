@@ -12,21 +12,28 @@ ALIASES = {
     'c10': 'CIFAR10',
     'cifar100': 'CIFAR100',
     'c100': 'CIFAR100',
+    'imagenet': 'IMAGENET',
 }
 
 NUM_CLASSES = {
     'CIFAR10': 10,
     'CIFAR100': 100,
+    'IMAGENET': 1000,
 }
 
 INPUT_SHAPE = {
     'CIFAR10': (3, 32, 32),
     'CIFAR100': (3, 32, 32),
+    'IMAGENET': None,
 }
 
 NORM_COEFS = {
     'ImageNet': ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     'MemScale': ((0,0,0), (2, 2, 2)),
+}
+
+POSSIBLE_PATH = {
+    'IMAGENET': "/datashare/ImageNet/ILSVRC2012",  # On Graham
 }
 
 def get_transforms(norm_coefs = NORM_COEFS['ImageNet']) -> Tuple[Callable, Callable]:
@@ -51,17 +58,17 @@ class SampleDataset(data.Dataset):
         self.map = np.concatenate([np.argwhere(dataset.targets == i)[:n_first] for i in np.unique(dataset.targets)]).flatten()
         assert self.map.size == n_first * len(np.unique(dataset.targets))
         self.map.sort()
-        
+
     def __getitem__(self, i):
         return self.dataset[self.map[i]]
-    
+
     def __len__(self):
         return self.map.size
-    
+
     @property
     def targets(self):
         return self.dataset.targets
-    
+
     @targets.setter
     def targets(self, val):
         self.dataset.targets = val
@@ -87,7 +94,7 @@ def get_dataloader(name:str,
     train_set = dset(root=root, train=True, download=True, transform=transform_train)
     train_set_clean = dset(root=root, train=True, download=True, transform=transform_test)
     test_set = dset(root=root, train=False, download=True, transform=transform_test)
-    
+
     if train_set_sample_per_classes is not None:
         train_set = SampleDataset(train_set, n_first=train_set_sample_per_classes)
     if train_set_clean_sample_per_classes is not None:
@@ -107,10 +114,10 @@ def get_output_dataset(dataloader: data.DataLoader,
     """Returns a dataloader with targets the output of the `model`. Care about the transforms of your `dataset`! """
     assert isinstance(model, nn.Module) and (not hasattr(model, '__attached_memquant') or model.__attached_memquant.quanted is False)
     new_targets = []
-    
+
     dset = dataloader.dataset.dataset if isinstance(dataloader.dataset, SampleDataset) else dataloader.dataset
     temp_dloader = data.DataLoader(dset, batch_size=dataloader.batch_size, shuffle=False, num_workers=dataloader.num_workers, pin_memory=True)
-    
+
     with torch.inference_mode():
         for inputs, _ in temp_dloader:
             res = model(inputs.to(device))
@@ -172,7 +179,7 @@ def batch_size_opt(dataloader,
             else:
                 raise
     return new_size
-        
+
 
 def adjust_batch_size(batch_size:int, dataloader:data.DataLoader, factor: float = 1.0, value: Optional[int] = None):
     new_size = value if value is not None else int(batch_size * factor)

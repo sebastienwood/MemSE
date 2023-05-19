@@ -154,7 +154,7 @@ class Linear(MemSELayer):
 	def memristored_einsum(self) -> dict:
 		return {
 			'weight': 'co,c->co',
-			'out': 'co,c->co',
+			'out': 'bc,c->bc',
 		}
 
 	def memse(self, previous_layer: MemSEReturn, *args, **kwargs):
