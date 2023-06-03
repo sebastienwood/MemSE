@@ -4,6 +4,10 @@ import torch.nn as nn
 from MemSE.fx import cast_to_memse
 from MemSE.nn import MontecarloReturn, MemSEReturn, MEMSE_MAP
 from MemSE import MemristorQuant
+from ofa.imagenet_classification.elastic_nn.modules.dynamic_layers import (
+    DynamicConvLayer,
+    DynamicLinearLayer,
+)
 
 
 class MemSE(nn.Module):
@@ -41,8 +45,35 @@ class OFAxMemSE(nn.Module):
         self.N = N
         assert hasattr(self.model, 'sample_active_subnet')
 
+        # Crude Gmax computation: count the nb of DynamicConvLayer  and DynamicLinearLayer
+        self.gmax_size = 0
+        for m in model.modules():
+            if isinstance(m , (DynamicLinearLayer, DynamicConvLayer)):
+                self.gmax_size += 1
+
     def sample_active_subnet(self):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
-        arch_config = self.model.sample_active_subnet() # type: ignore
-        # get maximal 
-        
+        # its also not very flexible as it only works for resnet
+        arch_config = self.model.sample_active_subnet()  # type: ignore
+        # get currently active crossbars as mask
+        # https://github.com/mit-han-lab/once-for-all/blob/a5381c1924d93e582e4a321b3432579507bf3d22/ofa/imagenet_classification/elastic_nn/networks/ofa_resnets.py#LL288C9-L291C35
+        # (only valid for resnet)
+        active_crossbars = [0, 2]
+        if self.model.input_stem_skipping <= 0:
+            active_crossbars.append(1)
+        current = 2
+        for stage_id, block_idx in enumerate(self.model.grouped_block_index):
+            depth_param = self.model.runtime_depth[stage_id]
+            active_idx = block_idx[: len(block_idx) - depth_param]
+            for idx in active_idx:
+                active_crossbars.append(current + idx + 1)
+            current += len(block_idx)
+        active_crossbars.append(current + 1)  # linear classifier
+        active_crossbars.sort()
+
+        # sample on these crossbars Gmax
+
+        # return intialized memse
+        model = self.model.get_active_subnet()
+        model = cast_to_memse(model, self.opmap)
+        quanter = MemristorQuant(self.model, std_noise=self.std_noise, N=self.N, Gmax=gmax)
