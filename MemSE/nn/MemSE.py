@@ -66,7 +66,7 @@ class OFAxMemSE(nn.Module):
             depth_param = self.model.runtime_depth[stage_id]
             active_idx = block_idx[: len(block_idx) - depth_param]
             for idx in active_idx:
-                active_crossbars.append(current + idx + 1)
+                active_crossbars.append(current + idx + 1) # TODO check if there arent 3 convs that should be accounted here
             current += len(block_idx)
         active_crossbars.append(current + 1)  # linear classifier
         active_crossbars.sort()
