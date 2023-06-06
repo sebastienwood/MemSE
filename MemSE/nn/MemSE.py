@@ -58,12 +58,10 @@ class OFAxMemSE(nn.Module):
         self.gmax_size = count_layers(model)
         print('OFAxMemSE initialized with ', self.gmax_size, ' crossbars')
 
-    def sample_active_subnet(self, max_arch:bool=False):
+    def sample_active_subnet(self):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
         # its also not very flexible as it only works for resnet
         arch_config = self.model.sample_active_subnet()  # type: ignore
-        if max_arch:
-            self.model.set_max_net()
 
         # get currently active crossbars as mask
         # https://github.com/mit-han-lab/once-for-all/blob/a5381c1924d93e582e4a321b3432579507bf3d22/ofa/imagenet_classification/elastic_nn/networks/ofa_resnets.py#LL288C9-L291C35
@@ -80,11 +78,12 @@ class OFAxMemSE(nn.Module):
                 current = max(active_crossbars) + 1
         active_crossbars.append(current)  # linear classifier
         active_crossbars.sort()
-        print(active_crossbars)
+        gmax = torch.zeros(len(active_crossbars)).exponential_().tolist()
+        gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
+        state = arch_config | {'gmax': gmax_clean}
 
-        # sample on these crossbars Gmax
-        assert False
         # return intialized memse
         model = self.model.get_active_subnet()
-        model = cast_to_memse(model, self.opmap)
-        quanter = MemristorQuant(self.model, std_noise=self.std_noise, N=self.N, Gmax=gmax)
+        self._model = cast_to_memse(model, self.opmap)
+        self._quanter = MemristorQuant(self.model, std_noise=self.std_noise, N=self.N, Gmax=gmax)
+        return state
