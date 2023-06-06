@@ -134,7 +134,7 @@ class MemSELayer(nn.Module):
     @property
     def memristored_einsum(self) -> dict:
         return {}
-    
+
     @property
     def memristored_real_shape(self) -> dict:
         """Overwrite the access method for the memristored keys if usage is different in Pytorch than the Memristor representation stored in the crossbar.

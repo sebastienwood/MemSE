@@ -11,4 +11,4 @@ from .Reshaper import Reshaper, Flattener
 from .Add import Add
 from .Tensor import *
 from .map import MEMSE_MAP, register_memse_mapping
-from .MemSE import MemSE
+from .MemSE import MemSE, OFAxMemSE
