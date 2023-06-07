@@ -10,13 +10,14 @@ from ofa.imagenet_classification.elastic_nn.modules.dynamic_layers import (
     DynamicLinearLayer,
     DynamicConv2d
 )
+from ofa.imagenet_classification.elastic_nn.utils import set_running_statistics
 
 
 class MemSE(nn.Module):
-    def __init__(self, model:nn.Module, opmap:dict = MEMSE_MAP, std_noise:float = 0.001, N:int = 1e6, *args, **kwargs) -> None:
+    def __init__(self, model:nn.Module, opmap:dict = MEMSE_MAP, std_noise:float = 0.001, N:int = 1e6, gu=10., *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.model = cast_to_memse(model, opmap)
-        self.quanter = MemristorQuant(self.model, std_noise=std_noise, N=N, Gmax=10.)
+        self.quanter = MemristorQuant(self.model, std_noise=std_noise, N=N, Gmax=gu)
 
     def forward(self, x):
         return self.model(x)
@@ -69,9 +70,15 @@ class OFAxMemSE(nn.Module):
         print('OFAxMemSE initialized with ', self.gmax_size, ' crossbars')
 
     def forward(self, inp):
-        return self._model(inp)
+        return self._model.forward(inp)
+    
+    def montecarlo_forward(self, inp):
+        return self._model.montecarlo_forward(inp)
 
-    def sample_active_subnet(self):
+    def memse_forward(self, inp):
+        return self._model.memse_forward(inp)
+
+    def sample_active_subnet(self, data_loader):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
         # its also not very flexible as it only works for resnet
         arch_config = self.model.sample_active_subnet()  # type: ignore
@@ -90,23 +97,21 @@ class OFAxMemSE(nn.Module):
         active_crossbars.sort()
 
         model = self.model.get_active_subnet()
-        self._model = cast_to_memse(model, self.opmap)
-        self._quanter = MemristorQuant(self._model, std_noise=self.std_noise, N=self.N)
-        assert self._quanter.Wmax.numel() == len(active_crossbars)
+        set_running_statistics(model, data_loader)
+        self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=gmax)
+        assert self._model.quanter.Wmax.numel() == len(active_crossbars)
 
-        gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1), self._quanter.Wmax)
+        gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1), self._model.quanter.Wmax)
         gmax.clamp_(1e-6)
-        self._quanter.init_gmax(gmax)
+        self._model.quanter.init_gmax(gmax)
         gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
         state = arch_config | {'gmax': gmax_clean}
         return state
     
-    def set_active_subnet(self, arch):
+    def set_active_subnet(self, arch, data_loader):
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
         self.model.set_active_subnet(arch)
         model = self.model.get_active_subnet()
-        # TODO running statistics
-        self._model = cast_to_memse(model, self.opmap)
-        self._quanter = MemristorQuant(self._model, std_noise=self.std_noise, N=self.N, gmax=gmax)
-        
+        set_running_statistics(model, data_loader)
+        self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=gmax)

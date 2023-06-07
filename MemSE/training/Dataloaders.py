@@ -3,6 +3,7 @@ from MemSE.definitions import ROOT
 from torch.utils import data
 from torchvision import transforms, datasets
 import math
+import torch
 
 
 __all__ = ['CIFAR10', 'CIFAR100', 'ImageNet']
@@ -116,6 +117,40 @@ class Dataloader:
             self.valid_loader.dataset.transform = self._valid_transform_dict[self.active_img_size]
         if self.test_loader is not None:
             self.test_loader.dataset.transform = self._valid_transform_dict[self.active_img_size]
+
+    def build_sub_train_loader(
+        self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
+    ):
+        # used for resetting BN running statistics
+        if self.__dict__.get("sub_train_%d" % self.active_img_size, None) is None:
+            if num_worker is None:
+                num_worker = self.train.num_workers
+
+            n_samples = len(self.train.dataset)
+            rand_indexes = torch.randperm(n_samples).tolist()
+
+            new_train_dataset = self.train_set(
+                self.build_train_transform(
+                    image_size=self.active_img_size, print_log=False
+                )
+            )
+            chosen_indexes = rand_indexes[:n_images]
+            sub_sampler = torch.utils.data.sampler.SubsetRandomSampler(
+                chosen_indexes
+            )
+            sub_data_loader = torch.utils.data.DataLoader(
+                new_train_dataset,
+                batch_size=batch_size,
+                sampler=sub_sampler,
+                num_workers=num_worker,
+                pin_memory=True,
+            )
+            self.__dict__["sub_train_%d" % self.active_img_size] = []
+            for images, labels in sub_data_loader:
+                self.__dict__["sub_train_%d" % self.active_img_size].append(
+                    (images, labels)
+                )
+        return self.__dict__["sub_train_%d" % self.active_img_size]
 
 
 class CIFAR10(Dataloader):

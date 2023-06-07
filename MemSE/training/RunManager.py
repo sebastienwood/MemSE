@@ -150,14 +150,3 @@ class RunManager:
                     metrics.display(i + 1)
         metrics.display_summary()
         return metrics.losses.avg, metrics
-
-    def reset_running_statistics(
-        self, net=None, subset_size=2000, subset_batch_size=200, data_loader=None
-    ):
-        from ofa.imagenet_classification.elastic_nn.utils import set_running_statistics
-
-        if data_loader is None:
-            data_loader = self.run_config.random_sub_train_loader(
-                subset_size, subset_batch_size
-            )
-        set_running_statistics(net, data_loader)

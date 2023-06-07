@@ -103,8 +103,10 @@ class AccuracyDataset:
                         )
                         t.update()
                         continue
-                    ofa_network.set_active_subnet(**net_setting)
-                    run_manager.reset_running_statistics(ofa_network) # TODO
+                    data_loader = run_manager._loader.build_sub_train_loader(
+                        n_images=2000, batch_size=200
+                    )
+                    ofa_network.set_active_subnet(**net_setting, data_loader)
                     net_setting_str = ",".join(
                         [
                             "%s_%s"
