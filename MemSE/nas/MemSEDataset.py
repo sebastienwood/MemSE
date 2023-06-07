@@ -51,12 +51,12 @@ class AccuracyDataset:
         self, run_manager, ofa_network, n_arch=1000, image_size_list=None
     ):
         # load net_id_list, random sample if not exist
+        # TODO lhs sampling
         if os.path.isfile(self.net_id_path):
             net_id_list = json.load(open(self.net_id_path))
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
-                # TODO add memristors parameters to the sampling process
                 net_setting = ofa_network.sample_active_subnet()
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
@@ -104,13 +104,13 @@ class AccuracyDataset:
                         t.update()
                         continue
                     ofa_network.set_active_subnet(**net_setting)
-                    run_manager.reset_running_statistics(ofa_network)
+                    run_manager.reset_running_statistics(ofa_network) # TODO
                     net_setting_str = ",".join(
                         [
                             "%s_%s"
                             % (
                                 key,
-                                "%.1f" % list_mean(val)
+                                "%.1f" % (sum(val) / len(val))
                                 if isinstance(val, list)
                                 else val,
                             )
@@ -165,7 +165,7 @@ class AccuracyDataset:
         with tqdm(total=len(acc_dict), desc="Loading data") as t:
             for k, v in acc_dict.items():
                 dic = json.loads(k)
-                X_all.append(arch_encoder.arch2feature(dic))
+                X_all.append(arch_encoder.arch2feature(dic)) # TODO
                 Y_all.append(v / 100.0)  # range: 0 - 1
                 t.update()
         base_acc = np.mean(Y_all)

@@ -1,3 +1,4 @@
+from typing import List
 import torch
 
 def accuracy(output, target, topk=(1,)) -> List[torch.Tensor]:

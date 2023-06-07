@@ -13,7 +13,7 @@ class MemristorQuant(object):
 	def __init__(self,
 				 model: nn.Module,
 				 N: int = 128,
-				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.ALL,
+				 wmax_mode:Union[str, WMAX_MODE] = WMAX_MODE.LAYERWISE,
 				 Gmax=0.1,
 				 std_noise:float=1.,
      			 tia_resistance:float=1.) -> None:
@@ -91,6 +91,7 @@ class MemristorQuant(object):
 
 	def init_gmax(self, Gmax):
 		Gmax = torchize(Gmax)
+		Gmax.clamp_(0.)
 		if self.wmax_mode == WMAX_MODE.ALL:
 			assert Gmax.numel() == 1
 			for t in self.crossbars:

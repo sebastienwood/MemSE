@@ -1,3 +1,4 @@
+import copy
 from typing import Optional
 import torch
 import torch.nn as nn
@@ -56,7 +57,19 @@ class OFAxMemSE(nn.Module):
 
         # Crude Gmax computation: count the nb of DynamicConvLayer and DynamicLinearLayer
         self.gmax_size = count_layers(model)
+        # Cache block index to crossbars index
+        self.block_to_crossbar_map = {}
+        for stage_id, block_idx in enumerate(self.model.grouped_block_index):
+            for idx in block_idx:
+                if idx - 1 in self.block_to_crossbar_map:
+                    offset = max(self.block_to_crossbar_map[idx-1]) + 1
+                else:
+                    offset = 3
+                self.block_to_crossbar_map[idx] = [offset + v for v in range(count_layers(self.model.blocks[idx]))]
         print('OFAxMemSE initialized with ', self.gmax_size, ' crossbars')
+
+    def forward(self, inp):
+        return self._model(inp)
 
     def sample_active_subnet(self):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
@@ -66,24 +79,34 @@ class OFAxMemSE(nn.Module):
         # get currently active crossbars as mask
         # https://github.com/mit-han-lab/once-for-all/blob/a5381c1924d93e582e4a321b3432579507bf3d22/ofa/imagenet_classification/elastic_nn/networks/ofa_resnets.py#LL288C9-L291C35
         # (only valid for resnet)
-        active_crossbars = [0, 2]
+        active_crossbars = [0, 2, self.gmax_size - 1]
         if self.model.input_stem_skipping <= 0:
             active_crossbars.append(1)
-        current = 3
         for stage_id, block_idx in enumerate(self.model.grouped_block_index):
             depth_param = self.model.runtime_depth[stage_id]
             active_idx = block_idx[: len(block_idx) - depth_param]
             for idx in active_idx:
-                active_crossbars.extend([current + v for v in range(count_layers(self.model.blocks[idx]))])
-                current = max(active_crossbars) + 1
-        active_crossbars.append(current)  # linear classifier
+                active_crossbars.extend(self.block_to_crossbar_map[idx])
         active_crossbars.sort()
-        gmax = torch.zeros(len(active_crossbars)).exponential_().tolist()
-        gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
-        state = arch_config | {'gmax': gmax_clean}
 
-        # return intialized memse
         model = self.model.get_active_subnet()
         self._model = cast_to_memse(model, self.opmap)
-        self._quanter = MemristorQuant(self.model, std_noise=self.std_noise, N=self.N, Gmax=gmax)
+        self._quanter = MemristorQuant(self._model, std_noise=self.std_noise, N=self.N)
+        assert self._quanter.Wmax.numel() == len(active_crossbars)
+
+        gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1), self._quanter.Wmax)
+        gmax.clamp_(1e-6)
+        self._quanter.init_gmax(gmax)
+        gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
+        state = arch_config | {'gmax': gmax_clean}
         return state
+    
+    def set_active_subnet(self, arch):
+        arch = copy.deepcopy(arch)
+        gmax = arch.pop('gmax')
+        self.model.set_active_subnet(arch)
+        model = self.model.get_active_subnet()
+        # TODO running statistics
+        self._model = cast_to_memse(model, self.opmap)
+        self._quanter = MemristorQuant(self._model, std_noise=self.std_noise, N=self.N, gmax=gmax)
+        
