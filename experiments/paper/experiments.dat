@@ -4,7 +4,12 @@
 # python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.2 --per-class-sample 10 --gen-col -1
 # python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.5 --per-class-sample 10 --gen-col -1
 # python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 5 --per-class-sample 10 --gen-col -1
-python experiments/paper/time_nmc.py --memscale --network make_JohNet --method unfolded --CI 5 --z 98
-python experiments/paper/time_nmc.py --memscale --network make_JohNet --method fc --CI 5 --z 98
-python experiments/paper/time_nmc.py --memscale --network make_JohNet --method unfolded --CI 2 --z 98
-python experiments/paper/time_nmc.py --memscale --network make_JohNet --method fc --CI 2 --z 98
+# python experiments/paper/time_nmc.py --memscale --network make_JohNet --method unfolded --CI 5 --z 98
+# python experiments/paper/time_nmc.py --memscale --network make_JohNet --method fc --CI 5 --z 98
+# python experiments/paper/time_nmc.py --memscale --network make_JohNet --method unfolded --CI 2 --z 98
+# python experiments/paper/time_nmc.py --memscale --network make_JohNet --method fc --CI 2 --z 98
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.7 --per-class-sample 10 --gen-col -1 --gen-layer 50
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.8 --per-class-sample 10 --gen-col -1 --gen-layer 50
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 0.9 --per-class-sample 10 --gen-col -1 --gen-layer 50
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 1 --per-class-sample 10 --gen-col -1 --gen-layer 50
+python experiments/paper/opt.py --memscale --opt-mode opt_power --mse-budget 2 --per-class-sample 10 --gen-col -1 --gen-layer 50

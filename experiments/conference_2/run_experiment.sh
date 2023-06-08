@@ -2,12 +2,12 @@
 #SBATCH --gres=gpu:1       # Request GPU "generic resources"
 #SBATCH --cpus-per-task=12  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #SBATCH --mem=120G       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-#SBATCH --time=3-12:00     # DD-HH:MM:SS
+#SBATCH --time=0-1:00     # DD-HH:MM:SS
 #SBATCH --mail-user=sebastien.henwood@polymtl.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=FAIL
 #SBATCH --output=outputs/%x-%A-%a.out
-#SBATCH --account=def-franlp
+#SBATCH --account=rrg-franlp
 
 module load StdEnv/2020 python/3.9 cuda cudnn
 
@@ -18,16 +18,6 @@ cd ../..
 echo "$SOURCEDIR"
 echo "$PWD"
 nvidia-smi
-
-#aSBATCH --cpus-per-task=4  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
-#aSBATCH --mem=12000M       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham.
-# python experiments/paper/opt_profile.py --network make_JohNet
-#python experiments/paper/opt.py --memscale --power-budget 500000 --per-class-sample 2
-#python experiments/paper/opt.py --memscale --power-budget 600000 --per-class-sample 2
-#python experiments/paper/opt.py --memscale --power-budget 700000 --per-class-sample 2
-#python experiments/paper/opt.py --memscale --power-budget 800000 --per-class-sample 2
-#python experiments/paper/opt.py --memscale --power-budget 1000000 --per-class-sample 2
-#python experiments/paper/time.py
 
 ###
 # ENV PREPARATION
@@ -55,7 +45,7 @@ fi
 
 line_to_read=$(($SLURM_ARRAY_TASK_ID+1))
 echo "Line to read = $line_to_read"
-SED_RES=$(sed -n "$line_to_read"p "$SOURCEDIR/experiments/paper/experiments.dat")
+SED_RES=$(sed -n "$line_to_read"p "$SOURCEDIR/experiments/conference_2/experiments.dat")
 echo "${SED_RES} --datapath ${datapath}"
 eval "${SED_RES} --datapath ${datapath}"
 echo "Done"

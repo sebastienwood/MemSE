@@ -12,4 +12,4 @@ ofaxmemse = OFAxMemSE(ofa)
 # TODO runmanager and test memsedataset.build_acc_dataset
 run_config = RunConfig(dataset_root=ROOT)
 run_manager = RunManager(run_config, mode=FORWARD_MODE.MONTECARLO)
-MemSEDataset.AccuracyDataset(ROOT / 'experiments/conference_2').build_acc_dataset(run_manager, ofaxmemse)
+MemSEDataset.AccuracyDataset(ROOT / 'experiments/conference_2/results').build_acc_dataset(run_manager, ofaxmemse)

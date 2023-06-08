@@ -175,7 +175,7 @@ def genetic_alg(memse:MemSE,
                 batch_stop: int = -1):
 	if nb_gen < 1:
 		mse, P = test_mse_th(dataloader, memse, batch_stop=batch_stop)
-		return P, mse, memse.quanter.Gmax.cpu().numpy()
+		return P, mse, memse.quanter.Gmax.detach().cpu().numpy()
 
 	problem = MemSEProblem(n_vars,
 						   1,

@@ -5,6 +5,7 @@ torchtyping
 scipy
 opt_einsum
 triton
+ofa
 
 pymoo
 
