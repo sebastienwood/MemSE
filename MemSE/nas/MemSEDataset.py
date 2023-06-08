@@ -106,27 +106,14 @@ class AccuracyDataset:
                     data_loader = run_manager._loader.build_sub_train_loader(
                         n_images=2000, batch_size=200
                     )
-                    ofa_network.set_active_subnet(**net_setting, data_loader)
-                    net_setting_str = ",".join(
-                        [
-                            "%s_%s"
-                            % (
-                                key,
-                                "%.1f" % (sum(val) / len(val))
-                                if isinstance(val, list)
-                                else val,
-                            )
-                            for key, val in net_setting.items()
-                        ]
-                    )
-                    # TODO replace validate with MemSE's loop (pass the subnet)
-                    loss, (top1, top5) = run_manager.validate(
-                        run_str=net_setting_str,
+                    ofa_network.set_active_subnet(net_setting, data_loader)
+
+                    loss, metrics = run_manager.validate(
                         net=ofa_network,
                         data_loader=val_dataset,
                         no_logs=True,
                     )
-                    info_val = top1
+                    info_val = metrics.top1.avg
 
                     t.set_postfix(
                         {
@@ -137,7 +124,7 @@ class AccuracyDataset:
                     )
                     t.update()
 
-                    acc_dict.update({key: info_val})
+                    acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
                     json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
 
     def merge_acc_dataset(self, image_size_list=None):

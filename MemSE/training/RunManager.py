@@ -6,17 +6,10 @@ import torch.nn as nn
 from MemSE.nn import FORWARD_MODE, MemSE
 import MemSE.training.Dataloaders as dloader
 from MemSE.misc import AverageMeter, accuracy, Summary, ProgressMeter
+from .RunConfig import RunConfig
 
 
-@dataclass
-class RunConfig:
-    dataset: str
-    dataset_root: Optional[str]
-    dataset_bs: int = 128
-    dataset_workers: int = 4
-    dataset_imagesize: int = 32
-
-    print_freq: int = 10
+__all__ = ['Metrics', 'RunManager']
 
 
 class Metrics:
@@ -58,7 +51,6 @@ class RunManager:
     ) -> None:
         if torch.cuda.is_available() and (not no_gpu):
             self.device = torch.device("cuda:0")
-            self.net = self.net.to(self.device)
             torch.backends.cudnn.benchmark = True  # type: ignore
         else:
             self.device = torch.device("cpu")
@@ -115,14 +107,12 @@ class RunManager:
         self,
         epoch=0,
         is_test=False,
-        run_str="",
         net=None,
         data_loader=None,
         no_logs=False,
         train_mode=False,
     ):
-        if net is None:
-            net = self.net
+        net = net.to(self.device)
         # if not isinstance(net, nn.DataParallel):
         #     net = nn.DataParallel(net)
 
@@ -134,7 +124,7 @@ class RunManager:
         else:
             net.eval()
 
-        metrics = Metrics(len(data_loader), 'Validation: ')
+        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ')
 
         with torch.no_grad():
             end = time.time()
@@ -146,7 +136,7 @@ class RunManager:
                 self.forward(self.mode, net, images, labels, self.test_criterion, metrics)
                 metrics.update(batch_time=time.time() - end)
                 end = time.time()
-                if i % self.run_config.print_freq == 0:
+                if not no_logs and i % self.run_config.print_freq == 0:
                     metrics.display(i + 1)
         metrics.display_summary()
         return metrics.losses.avg, metrics

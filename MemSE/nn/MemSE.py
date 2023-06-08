@@ -101,7 +101,7 @@ class OFAxMemSE(nn.Module):
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=gmax)
         assert self._model.quanter.Wmax.numel() == len(active_crossbars)
 
-        gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1), self._model.quanter.Wmax)
+        gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1, 0.1), self._model.quanter.Wmax)
         gmax.clamp_(1e-6)
         self._model.quanter.init_gmax(gmax)
         gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
@@ -111,7 +111,7 @@ class OFAxMemSE(nn.Module):
     def set_active_subnet(self, arch, data_loader):
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
-        self.model.set_active_subnet(arch)
+        self.model.set_active_subnet(**arch)
         model = self.model.get_active_subnet()
         set_running_statistics(model, data_loader)
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=gmax)
