@@ -14,18 +14,23 @@ module load StdEnv/2020 python/3.9 cuda cudnn
 u=${u:-sebwood}
 echo "User $u on shell $0"
 SOURCEDIR=~/projects/def-franlp/$u/MemSE
-cd ../..
-echo "$SOURCEDIR"
-echo "$PWD"
+cd $SOURCEDIR
 nvidia-smi
 
 ###
 # ENV PREPARATION
+# First method is to create the venv on the spot, ensuring fresh installation: it fails if the node is offline and some wheels are not cached
+# Second is to push a cached venv
 ###
-python3 -m venv $SLURM_TMPDIR/env
-source $SLURM_TMPDIR/env/bin/activate
-python -m pip install --no-index --upgrade pip setuptools
-python -m pip install --no-index -r $SOURCEDIR/requirements.txt # --find-links "$SOURCEDIR"/experiments/paper/.installs/
+# python3 -m venv $SLURM_TMPDIR/env
+# source $SLURM_TMPDIR/env/bin/activate
+# python -m pip install --no-index --upgrade pip setuptools
+# python -m pip install --no-index -r $SOURCEDIR/requirements.txt # --find-links "$SOURCEDIR"/experiments/paper/.installs/
+
+cp ~/projects/def-franlp/$u/venv.tar.gz $SLURM_TMPDIR
+tar xzf $SLURM_TMPDIR/venv.tar.gz -C $SLURM_TMPDIR
+source $SLURM_TMPDIR/.venv/bin/activate
+
 datapath=$SLURM_TMPDIR/data
 mkdir $datapath
 TODAY=$(TZ=":America/Montreal" date)
@@ -43,7 +48,7 @@ if [ "$dset" == "CIFAR10" ]; then
     tar xzf $datapath/cifar-10-python.tar.gz -C $datapath
 fi
 
-line_to_read=$(($SLURM_ARRAY_TASK_ID+1))
+line_to_read=$(($SLURM_ARRAY_TASK_ID))
 echo "Line to read = $line_to_read"
 SED_RES=$(sed -n "$line_to_read"p "$SOURCEDIR/experiments/conference_2/experiments.dat")
 echo "${SED_RES} --datapath ${datapath}"
