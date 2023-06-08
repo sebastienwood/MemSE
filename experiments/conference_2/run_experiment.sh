@@ -31,8 +31,6 @@ cp ~/projects/def-franlp/$u/venv.tar.gz $SLURM_TMPDIR
 tar xzf $SLURM_TMPDIR/venv.tar.gz -C $SLURM_TMPDIR
 source $SLURM_TMPDIR/.venv/bin/activate
 
-datapath=$SLURM_TMPDIR/data
-mkdir $datapath
 TODAY=$(TZ=":America/Montreal" date)
 COMMIT_ID=$(git rev-parse --verify HEAD)
 echo "Experiment $SLURM_JOB_ID ($PWD) start $TODAY on node $SLURMD_NODENAME (git commit id $COMMIT_ID)"
