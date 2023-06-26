@@ -82,7 +82,7 @@ def default(val, dval):
 def torchize(val):
 	if isinstance(val, np.ndarray):
 		return torch.from_numpy(val)
-	elif isinstance(val, (float, int)):
+	elif isinstance(val, (float, int, list)):
 		return torch.tensor(val)
 	elif isinstance(val, torch.Tensor):
 		return val

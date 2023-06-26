@@ -1,1 +1,5 @@
-python experiments/conference_2/prototyping.py
+python experiments/conference_2/prototyping_2.py
+python experiments/conference_2/prototyping.py --image_size 128
+python experiments/conference_2/prototyping.py --image_size 160
+python experiments/conference_2/prototyping.py --image_size 192
+python experiments/conference_2/prototyping.py --image_size 224

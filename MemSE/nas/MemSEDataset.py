@@ -1,6 +1,7 @@
 # Adapted from https://github.com/mit-han-lab/once-for-all/blob/master/ofa/nas/accuracy_predictor/acc_dataset.py
 import json
 import os
+from MemSE.nn import OFAxMemSE
 import torch
 import numpy as np
 import torch.utils.data
@@ -48,8 +49,11 @@ class AccuracyDataset:
 
     # TODO: support parallel building
     def build_acc_dataset(
-        self, run_manager, ofa_network, n_arch=1000, image_size_list=None
+        self, run_manager, ofa_network: OFAxMemSE, n_arch=1000, image_size_list=None
     ):
+        data_loader = run_manager._loader.build_sub_train_loader(
+                        n_images=2000, batch_size=200
+                    )
         # load net_id_list, random sample if not exist
         # TODO lhs sampling
         if os.path.isfile(self.net_id_path):
@@ -57,7 +61,7 @@ class AccuracyDataset:
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
-                net_setting = ofa_network.sample_active_subnet()
+                net_setting = ofa_network.sample_active_subnet()#data_loader, skip_adaptation=True)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
             net_id_list = list(net_id_list)
@@ -75,7 +79,11 @@ class AccuracyDataset:
                 # load val dataset into memory
                 val_dataset = []
                 run_manager._loader.assign_active_img_size(image_size)
-                for images, labels in run_manager.valid_loader:
+                for batch in run_manager.valid_loader:
+                    if isinstance(batch, dict):
+                        images, labels = batch['image'], batch['label']
+                    else:
+                        images, labels = batch
                     val_dataset.append((images, labels))
                 # save path
                 os.makedirs(self.acc_src_folder, exist_ok=True)
@@ -103,17 +111,17 @@ class AccuracyDataset:
                         )
                         t.update()
                         continue
-                    data_loader = run_manager._loader.build_sub_train_loader(
-                        n_images=2000, batch_size=200
-                    )
-                    ofa_network.set_active_subnet(net_setting, data_loader)
+
+                    ofa_network.set_active_subnet(**net_setting)#, data_loader)
+                    # ofa_network.quant()
 
                     loss, metrics = run_manager.validate(
                         net=ofa_network,
                         data_loader=val_dataset,
-                        no_logs=True,
+                        #no_logs=True,
                     )
                     info_val = metrics.top1.avg
+                    # ofa_network.unquant()
 
                     t.set_postfix(
                         {
@@ -124,7 +132,7 @@ class AccuracyDataset:
                     )
                     t.update()
 
-                    acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
+                    acc_dict.update({key: {'top1':info_val}})#, 'power':metrics.power.avg}})
                     json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
 
     def merge_acc_dataset(self, image_size_list=None):

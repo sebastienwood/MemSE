@@ -2,18 +2,19 @@
 from MemSE.definitions import ROOT
 from torch.utils import data
 from torchvision import transforms, datasets
+import os
 import math
 import torch
 
 
-__all__ = ['CIFAR10', 'CIFAR100', 'ImageNet']
+__all__ = ['CIFAR10', 'CIFAR100', 'ImageNet', 'ImageNetHF', 'FakeImageNet']
 
 # TODO do not support the training phase of OFA with dynamic image size
 # TODO distributed ?
 
 
 class Dataloader:
-    ROOT_PATH = f'{ROOT}/data'
+    ROOT_PATH = f'{ROOT}/data' if 'DATASET_STORE' not in os.environ else os.environ['DATASET_STORE']
     NUM_CLASSES = None
     BS = 128
     WORKERS = 4
@@ -26,7 +27,7 @@ class Dataloader:
 
     def __init__(self, **kwargs) -> None:
         if 'root' in kwargs:
-            self.ROOT = kwargs['root']
+            self.ROOT_PATH = kwargs['root']
         if 'imagesize' in kwargs:
             self.IMAGE_SIZE = kwargs['imagesize']
 
@@ -46,19 +47,19 @@ class Dataloader:
             self._valid_transform_dict[self.IMAGE_SIZE] = self.build_valid_transform(self.IMAGE_SIZE)
 
         if self.TRAIN_KWARGS is not None:
-            self.train_set = self.DATASET(root=self.ROOT_PATH, **self.TRAIN_KWARGS, transform=self.build_train_transform())
+            self.train_set = self.get_dataset(self.build_train_transform(), **self.TRAIN_KWARGS)
             self.train_loader = data.DataLoader(self.train_set, batch_size=self.BS, shuffle=True, num_workers=self.WORKERS, pin_memory=True)
         else:
             self.train_set = self.train_loader = None
 
         if self.TEST_KWARGS is not None:
-            self.test_set = self.DATASET(root=self.ROOT_PATH, **self.TEST_KWARGS, transform=self._valid_transform_dict[self.active_img_size])
+            self.test_set = self.get_dataset(self._valid_transform_dict[self.active_img_size], **self.TEST_KWARGS)
             self.test_loader = data.DataLoader(self.test_set, batch_size=self.BS, shuffle=False, num_workers=self.WORKERS, pin_memory=True)
         else:
             self.test_set = self.test_loader = None
 
         if self.VALID_KWARGS is not None:
-            self.valid_set = self.DATASET(root=self.ROOT_PATH, **self.VALID_KWARGS, transform=self._valid_transform_dict[self.active_img_size])
+            self.valid_set = self.get_dataset(self._valid_transform_dict[self.active_img_size], **self.VALID_KWARGS)
             self.valid_loader = data.DataLoader(self.valid_set, batch_size=self.BS, shuffle=False, num_workers=self.WORKERS, pin_memory=True)
         else:
             self.valid_set = self.valid_loader = None
@@ -106,17 +107,23 @@ class Dataloader:
             ]
         )
 
+    def get_dataset(self, transform, **kwargs):
+        return self.DATASET(root=self.ROOT_PATH, transform=transform, **kwargs)
+
     def assign_active_img_size(self, new_img_size):
         self.active_img_size = new_img_size
         if self.active_img_size not in self._valid_transform_dict:
             self._valid_transform_dict[
                 self.active_img_size
             ] = self.build_valid_transform()
+        self.set_test_transform(self._valid_transform_dict[self.active_img_size])
+
+    def set_test_transform(self, transform):
         # change the transform of the valid and test set
         if self.valid_loader is not None:
-            self.valid_loader.dataset.transform = self._valid_transform_dict[self.active_img_size]
+            self.valid_loader.dataset.transform = transform
         if self.test_loader is not None:
-            self.test_loader.dataset.transform = self._valid_transform_dict[self.active_img_size]
+            self.test_loader.dataset.transform = transform
 
     def build_sub_train_loader(
         self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
@@ -124,16 +131,12 @@ class Dataloader:
         # used for resetting BN running statistics
         if self.__dict__.get("sub_train_%d" % self.active_img_size, None) is None:
             if num_worker is None:
-                num_worker = self.train.num_workers
+                num_worker = self.train_loader.num_workers
 
-            n_samples = len(self.train.dataset)
+            n_samples = len(self.train_set)
             rand_indexes = torch.randperm(n_samples).tolist()
 
-            new_train_dataset = self.train_set(
-                self.build_train_transform(
-                    image_size=self.active_img_size, print_log=False
-                )
-            )
+            new_train_dataset = self.get_dataset(**self.TRAIN_KWARGS, transform=self.build_train_transform(image_size=self.active_img_size))
             chosen_indexes = rand_indexes[:n_images]
             sub_sampler = torch.utils.data.sampler.SubsetRandomSampler(
                 chosen_indexes
@@ -146,7 +149,11 @@ class Dataloader:
                 pin_memory=True,
             )
             self.__dict__["sub_train_%d" % self.active_img_size] = []
-            for images, labels in sub_data_loader:
+            for batch in sub_data_loader:
+                if isinstance(batch, dict):
+                    images, labels = batch['image'], batch['label']
+                else:
+                    images, labels = batch
                 self.__dict__["sub_train_%d" % self.active_img_size].append(
                     (images, labels)
                 )
@@ -169,12 +176,48 @@ class CIFAR100(CIFAR10):
 
 
 class ImageNet(Dataloader):
+    # Could be renamed "Huggingface datasets"
     WORKERS = 32
     TRAIN_KWARGS = {'split': 'train'}
-    VALID_KWARGS = {'split': 'valid'}
+    VALID_KWARGS = {'split': 'validation'}
     TEST_KWARGS = None
     DATASET = datasets.ImageNet
-    ROOT = "/datashare/ImageNet/ILSVRC2012"
+    ROOT_PATH = "/datashare/ImageNet/ILSVRC2012"
     NUM_CLASSES = 1000
     IMAGE_SIZE = 224
     NORMALIZE = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+
+class ImageNetHF(ImageNet):
+    DATASET = "imagenet-1k"
+
+    def get_dataset(self, transform, **kwargs):
+        import datasets
+        dataset = datasets.load_dataset(self.DATASET, cache_dir=self.ROOT_PATH, **kwargs)
+        dataset.set_format(type='torch')
+        dataset.set_transform(self.transform_wrapper(transform))
+        return dataset
+
+    @staticmethod
+    def transform_wrapper(transform):
+        def fx(examples):
+            examples['image'] = [transform(i.convert("RGB")) for i in examples['image']]
+            return examples
+        return fx
+    
+    def set_test_transform(self, transform):
+        # change the transform of the valid and test set
+        if self.valid_loader is not None:
+            self.valid_loader.dataset.set_transform(self.transform_wrapper(transform))
+        if self.test_loader is not None:
+            self.test_loader.dataset.set_transform(self.transform_wrapper(transform))
+
+
+class FakeImageNet(ImageNet):
+    def get_dataset(self, transform, **kwargs):
+        from datasets import Dataset
+        images = [transforms.ToPILImage()(torch.rand(3, 256, 256)) for _ in range(256)]
+        ds = Dataset.from_dict({"image": images, "label": torch.randint(0, 999, 256).tolist()})
+        ds = ds.with_format("torch")
+        ds.set_transform(self.transform_wrapper(transform))
+        return ds

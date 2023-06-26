@@ -3,7 +3,7 @@ import time
 from typing import Optional
 import torch
 import torch.nn as nn
-from MemSE.nn import FORWARD_MODE, MemSE
+from MemSE.nn import FORWARD_MODE, MemSE, OFAxMemSE
 import MemSE.training.Dataloaders as dloader
 from MemSE.misc import AverageMeter, accuracy, Summary, ProgressMeter
 from .RunConfig import RunConfig
@@ -70,27 +70,27 @@ class RunManager:
 
     @property
     def train_loader(self):
-        return self._loader["train_loader"]
+        return self._loader.train_loader
 
     @property
     def valid_loader(self):
-        return self._loader["valid_loader"]
+        return self._loader.valid_loader
 
     @property
     def test_loader(self):
-        return self._loader["test_loader"]
+        return self._loader.test_loader
 
     @staticmethod
     def forward(mode, net, inp, targets, criterion, metrics: Metrics):
         if mode is FORWARD_MODE.MEMSE:
-            assert isinstance(net, MemSE)
+            assert isinstance(net, (MemSE, OFAxMemSE))
             memse_return = net.memse_forward(inp)
-            output = memse_return["out"]
+            output = memse_return.out
             raise ValueError("MemSE mode has not been fully implemented")
         elif mode is FORWARD_MODE.MONTECARLO:
-            assert isinstance(net, MemSE)
+            assert isinstance(net, (MemSE, OFAxMemSE))
             memse_return = net.montecarlo_forward(inp)
-            output = memse_return["out"]
+            output = memse_return.out
         else:
             output = net(inp)
             memse_return = None
@@ -98,9 +98,9 @@ class RunManager:
         acc1, acc5 = accuracy(output, targets, topk=(1, 5))
         metrics.update(
             losses=(loss.item(), inp.size(0)),
-            top1=(acc1[0], inp.size(0)),
-            top5=(acc5[0], inp.size(0)),
-            power=None if memse_return is None else (memse_return['power'].mean().item(), inp.size(0))
+            top1=(acc1[0].item(), inp.size(0)),
+            top5=(acc5[0].item(), inp.size(0)),
+            power=None if memse_return is None else (memse_return.power.mean().item(), inp.size(0))
         )
 
     def validate(
@@ -128,13 +128,17 @@ class RunManager:
 
         with torch.no_grad():
             end = time.time()
-            for i, (images, labels) in enumerate(data_loader):
+            for i, batch in enumerate(data_loader):
+                if isinstance(batch, dict):
+                    images, labels = batch['image'], batch['label']
+                else:
+                    images, labels = batch
                 images, labels = images.to(
                     self.device, non_blocking=True
                 ), labels.to(self.device, non_blocking=True)
                 # compute output
                 self.forward(self.mode, net, images, labels, self.test_criterion, metrics)
-                metrics.update(batch_time=time.time() - end)
+                metrics.update(batch_time=(time.time() - end,))
                 end = time.time()
                 if not no_logs and i % self.run_config.print_freq == 0:
                     metrics.display(i + 1)

@@ -98,6 +98,7 @@ class MemristorQuant(object):
 				t.Gmax = Gmax.item()
 
 		elif self.wmax_mode == WMAX_MODE.LAYERWISE:
+			assert Gmax.numel() == len(self.crossbars) or Gmax.dim() == 0, f'{Gmax.numel()=} != {len(self.crossbars)}'
 			if Gmax.dim() == 0:
 				Gmax = Gmax.repeat(len(self.crossbars))
 			for t, g in zip(self.crossbars, Gmax.tolist()):
