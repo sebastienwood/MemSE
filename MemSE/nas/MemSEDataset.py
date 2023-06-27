@@ -61,7 +61,7 @@ class AccuracyDataset:
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
-                net_setting = ofa_network.sample_active_subnet()#data_loader, skip_adaptation=True)
+                net_setting = ofa_network.sample_active_subnet(data_loader, skip_adaptation=True)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
             net_id_list = list(net_id_list)
@@ -112,8 +112,8 @@ class AccuracyDataset:
                         t.update()
                         continue
 
-                    ofa_network.set_active_subnet(**net_setting)#, data_loader)
-                    # ofa_network.quant()
+                    ofa_network.set_active_subnet(net_setting, data_loader)
+                    ofa_network.quant()
 
                     loss, metrics = run_manager.validate(
                         net=ofa_network,
@@ -121,7 +121,7 @@ class AccuracyDataset:
                         #no_logs=True,
                     )
                     info_val = metrics.top1.avg
-                    # ofa_network.unquant()
+                    ofa_network.unquant()
 
                     t.set_postfix(
                         {
@@ -132,7 +132,7 @@ class AccuracyDataset:
                     )
                     t.update()
 
-                    acc_dict.update({key: {'top1':info_val}})#, 'power':metrics.power.avg}})
+                    acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
                     json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
 
     def merge_acc_dataset(self, image_size_list=None):
