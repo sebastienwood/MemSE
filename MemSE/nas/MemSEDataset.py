@@ -51,9 +51,6 @@ class AccuracyDataset:
     def build_acc_dataset(
         self, run_manager, ofa_network: OFAxMemSE, n_arch=1000, image_size_list=None
     ):
-        data_loader = run_manager._loader.build_sub_train_loader(
-                        n_images=2000, batch_size=200
-                    )
         # load net_id_list, random sample if not exist
         # TODO lhs sampling
         if os.path.isfile(self.net_id_path):
@@ -61,7 +58,7 @@ class AccuracyDataset:
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
-                net_setting = ofa_network.sample_active_subnet(data_loader, skip_adaptation=True)
+                net_setting = ofa_network.sample_active_subnet(None, skip_adaptation=True)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
             net_id_list = list(net_id_list)
@@ -79,6 +76,9 @@ class AccuracyDataset:
                 # load val dataset into memory
                 val_dataset = []
                 run_manager._loader.assign_active_img_size(image_size)
+                data_loader = run_manager._loader.build_sub_train_loader(
+                        n_images=2000, batch_size=200
+                    )
                 for batch in run_manager.valid_loader:
                     if isinstance(batch, dict):
                         images, labels = batch['image'], batch['label']
@@ -118,7 +118,7 @@ class AccuracyDataset:
                     loss, metrics = run_manager.validate(
                         net=ofa_network,
                         data_loader=val_dataset,
-                        #no_logs=True,
+                        no_logs=True,
                     )
                     info_val = metrics.top1.avg
                     ofa_network.unquant()

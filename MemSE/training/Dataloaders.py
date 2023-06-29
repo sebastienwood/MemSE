@@ -2,6 +2,7 @@
 from MemSE.definitions import ROOT
 from torch.utils import data
 from torchvision import transforms, datasets
+from pathlib import Path
 import os
 import math
 import torch
@@ -111,6 +112,7 @@ class Dataloader:
         return self.DATASET(root=self.ROOT_PATH, transform=transform, **kwargs)
 
     def assign_active_img_size(self, new_img_size):
+        assert isinstance(new_img_size, int)
         self.active_img_size = new_img_size
         if self.active_img_size not in self._valid_transform_dict:
             self._valid_transform_dict[
@@ -126,7 +128,7 @@ class Dataloader:
             self.test_loader.dataset.transform = transform
 
     def build_sub_train_loader(
-        self, n_images, batch_size, num_worker=None, num_replicas=None, rank=None
+        self, n_images=2000, batch_size=128, num_worker=None, num_replicas=None, rank=None
     ):
         # used for resetting BN running statistics
         if self.__dict__.get("sub_train_%d" % self.active_img_size, None) is None:
@@ -176,20 +178,30 @@ class CIFAR100(CIFAR10):
 
 
 class ImageNet(Dataloader):
-    # Could be renamed "Huggingface datasets"
+    # This expects the dataset to be in a prepared state at ROOT_PATH
     WORKERS = 32
     TRAIN_KWARGS = {'split': 'train'}
-    VALID_KWARGS = {'split': 'validation'}
+    VALID_KWARGS = {'split': 'val'}
     TEST_KWARGS = None
-    DATASET = datasets.ImageNet
+    DATASET = datasets.ImageFolder
     ROOT_PATH = "/datashare/ImageNet/ILSVRC2012"
     NUM_CLASSES = 1000
     IMAGE_SIZE = 224
     NORMALIZE = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
+    def get_dataset(self, transform, **kwargs):
+        assert 'split' in kwargs
+        split = kwargs.pop('split')
+        p = Path(self.ROOT_PATH) / split
+        if not p.is_dir():
+            p = Path(self.ROOT_PATH) / f'imagenet/{split}'
+            assert p.is_dir(), f'Could not find the ImageNet prepared folder at path {p}'
+        return self.DATASET(root=p, transform=transform, **kwargs)
+
 
 class ImageNetHF(ImageNet):
     DATASET = "imagenet-1k"
+    VALID_KWARGS = {'split': 'validation'}
 
     def get_dataset(self, transform, **kwargs):
         import datasets

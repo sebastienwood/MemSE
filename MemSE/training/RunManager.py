@@ -111,7 +111,9 @@ class RunManager:
         data_loader=None,
         no_logs=False,
         train_mode=False,
+        mode:FORWARD_MODE=None,
     ):
+        mode = self.mode if mode is None else mode
         net = net.to(self.device)
         # if not isinstance(net, nn.DataParallel):
         #     net = nn.DataParallel(net)
@@ -137,7 +139,7 @@ class RunManager:
                     self.device, non_blocking=True
                 ), labels.to(self.device, non_blocking=True)
                 # compute output
-                self.forward(self.mode, net, images, labels, self.test_criterion, metrics)
+                self.forward(mode, net, images, labels, self.test_criterion, metrics)
                 metrics.update(batch_time=(time.time() - end,))
                 end = time.time()
                 if not no_logs and i % self.run_config.print_freq == 0:
