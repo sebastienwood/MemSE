@@ -94,8 +94,9 @@ class CrossBar(object):
 			self.intermediate_tensors.clear()
 		self.quanted = False
 		self.noised = False
+		self.scaled = False
 
-	def quant(self, N: int, c_one: bool = False):
+	def quant(self, N: int, c_one: bool = False, scaled: bool = True):
 		if self.quanted:
 			self.unquant()
 		self.c_one = c_one
@@ -106,10 +107,12 @@ class CrossBar(object):
 			self.intermediate_tensors[k] = true_value.clone().cpu()
 			self.intermediate_tensors[k].extra_info = f'QParam (cache) {k} of {self.module.__class__.__name__}'
 			self.tensors[k].data.copy_(true_value)
-		self.rescale()
+		if scaled:
+			self.rescale()
 		self.quanted = True
 
 	def renoise(self, std_noise: float, keep: CROSSBAR_TYPE = CROSSBAR_TYPE.ALL):
+		raise RuntimeError('This renoise method has been deprecated, please use FORWARD_MODE.MONTECARLO for noisy forwards')
 		assert self.quanted, 'Cannot renoise the original representation'
 		noise = defaultdict(lambda: None)
 		for k in self.tensors.keys():
@@ -118,54 +121,27 @@ class CrossBar(object):
 		self.noised = True
 		return noise
 
-	def _renoise(self, tensor: torch.Tensor, intermediate_tensor: torch.Tensor, std_noise: float, keep: CROSSBAR_TYPE = CROSSBAR_TYPE.ALL):
-		sign = torch.sign(intermediate_tensor)
-		if keep == CROSSBAR_TYPE.ALL:
-			tensor.data.copy_(torch.abs(intermediate_tensor))
-		elif keep == CROSSBAR_TYPE.POS:
-			tensor.data.copy_(torch.where(sign > 0, torch.abs(intermediate_tensor), 0))
-		elif keep == CROSSBAR_TYPE.NEG:
-			tensor.data.copy_(torch.where(sign < 0, torch.abs(intermediate_tensor), 0))
-		shape, device = tensor.shape, tensor.device
-		if keep == CROSSBAR_TYPE.ALL:
-			noise = torch.normal(mean=0., std=std_noise, size=shape, device=device) - torch.normal(mean=0., std=std_noise, size=shape, device=device)
-		else:
-			noise = torch.normal(mean=0., std=std_noise, size=shape, device=device)
-		tensor.data += noise
-		if keep == CROSSBAR_TYPE.ALL:
-			tensor.data *= sign
-		elif keep == CROSSBAR_TYPE.NEG:
-			tensor.data *= -1
-		return noise
-
 	def denoise(self):
+		raise RuntimeError('This renoise method has been deprecated, please use FORWARD_MODE.MONTECARLO for noisy forwards')
 		assert self.quanted, 'Cannot renoise the original representation'
 		for k in self.tensors.keys():
 			self.tensors[k].data.copy_(self.intermediate_tensors[k])
 		self.rescale()
 		self.noised = False
 
-	def rescale(self):
-		for v in self.tensors.values():
+	def rescale(self, tensors=None):
+		if tensors is None:
+			tensors = self.tensors.values()
+			self.scaled = True
+		else:
+			self.scaled = False
+		for v in tensors:
 			inp_shape = 'i' if len(v.shape) == 1 else 'ij'
 			v.data.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', v.data, 1/self.c))
 
-	def noise_montecarlo(self) -> Tuple[dict, dict, dict, dict]:
-		noise = self.renoise(self.manager.std_noise, CROSSBAR_TYPE.POS)
-		noised = defaultdict(lambda: None)
-		for k in self.tensors.keys():
-			noised[k] = self.tensors[k].clone()
-		self.denoise()
-
-		noise_n = self.renoise(self.manager.std_noise, CROSSBAR_TYPE.NEG)
-		noised_n = defaultdict(lambda: None)
-		for k in self.tensors.keys():
-			noised_n[k] = self.tensors[k].clone()
-		self.denoise()
-		return noise, noised, noise_n, noised_n
-
 	@torch.no_grad()
 	def _quantize(self, tensor, N: int) -> None:
+		self.scaled = False
 		delta = self.Gmax / N if not self.c_one else self.Wmax / N
 		inp_shape = 'i' if len(tensor.shape) == 1 else 'ij'
 		tensor.copy_(torch.einsum(f'{inp_shape},i -> {inp_shape}', torch.floor(torch.einsum(f'{inp_shape},i -> {inp_shape}', tensor, (self.c/delta))), delta))
