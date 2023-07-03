@@ -109,6 +109,7 @@ class OFAxMemSE(nn.Module):
             for idx in active_idx:
                 active_crossbars.extend(self.block_to_crossbar_map[idx])
         active_crossbars.sort()
+        self.active_crossbars = active_crossbars
 
         model = self.model.get_active_subnet()
         if hasattr(self, '_device'):

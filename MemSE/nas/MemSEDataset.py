@@ -2,6 +2,7 @@
 import json
 import os
 from MemSE.nn import OFAxMemSE
+from smt.sampling_methods import LHS
 import torch
 import numpy as np
 import torch.utils.data
@@ -58,9 +59,18 @@ class AccuracyDataset:
         else:
             net_id_list = set()
             while len(net_id_list) < n_arch:
-                net_setting = ofa_network.sample_active_subnet(None, skip_adaptation=True)
+                net_setting = ofa_network.sample_active_subnet(None, skip_adaptation=True, noisy=False)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
+                nb_cb = len(ofa_network.active_crossbars)
+                sampling = LHS(xlimits=([0.5] * nb_cb, [1.5] * nb_cb))
+                samples = sampling(50)
+                for options in range(len(samples)):
+                    gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]), ofa_network._model.quanter.Wmax)
+                    gmax_clean = torch.zeros(ofa_network.gmax_size).scatter_(0, torch.LongTensor(ofa_network.active_crossbars), gmax).tolist()
+                    net_setting |= {'gmax': gmax_clean}
+                    net_id = net_setting2id(net_setting)
+                    net_id_list.add(net_id)
             net_id_list = list(net_id_list)
             net_id_list.sort()
             json.dump(net_id_list, open(self.net_id_path, "w"), indent=4)
