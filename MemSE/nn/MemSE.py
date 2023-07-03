@@ -28,14 +28,14 @@ class MemSE(nn.Module):
     def unquant(self):
         self.quanter.unquant()
 
-    def montecarlo_forward(self, x):
-        assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
-        x = MontecarloReturn(out=x, power=torch.zeros(x.shape[0], device=x.device))
+    def montecarlo_forward(self, x, compute_power: bool = True):
+        assert self.quanter.quanted and not self.quanter.noised and not self.quanter.scaled, 'Need quanted (no rescale) and denoised'
+        x = MontecarloReturn(out=x, power=torch.zeros(x.shape[0], device=x.device) if compute_power else None)
         return self.model(x)
 
-    def memse_forward(self, x):
+    def memse_forward(self, x, compute_power: bool = True):
         assert self.quanter.quanted and not self.quanter.noised, 'Need quanted and denoised'
-        x = MemSEReturn(out=x, gamma=torch.zeros(0, device=x.device, dtype=x.dtype), gamma_shape=[*x.shape, *x.shape[1:]], power=torch.zeros(x.shape[0], device=x.device))
+        x = MemSEReturn(out=x, gamma=torch.zeros(0, device=x.device, dtype=x.dtype), gamma_shape=[*x.shape, *x.shape[1:]], power=torch.zeros(x.shape[0], device=x.device) if compute_power else None)
         return self.model(x)
 
 

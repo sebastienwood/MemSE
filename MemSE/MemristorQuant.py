@@ -140,12 +140,13 @@ class MemristorQuant(object):
 			print(f'Saved version dtype {self.saved_params[i].dtype} on {self.saved_params[i].device} (taking {self.memory_usage(self.saved_params[i])}) MB')
 			print(f'Current version dtype {self.actual_params[i].dtype} on {self.actual_params[i].device} (taking {self.memory_usage(self.actual_params[i])}) MB')
 
-	def quant(self, c_one=False):
+	def quant(self, c_one:bool = False, scaled:bool = True):
 		self._last_c_one = c_one
 		self.broadcast('unquant')
 		self.update_w_max()
-		self.broadcast('quant', N=self.N, c_one=c_one)
+		self.broadcast('quant', N=self.N, c_one=c_one, scaled=scaled)
 		self.quanted = True
+		self.scaled = scaled
 
 	def renoise(self):
 		self.broadcast('renoise', std_noise=self.std_noise)

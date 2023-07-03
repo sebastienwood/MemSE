@@ -98,21 +98,22 @@ class MemSELayer(nn.Module):
         zm_mu = self.functional_base(previous_layer.out, *noisy[1], *args, **kwargs)
 
         # ENERGY
-        sum_x_gd: torch.Tensor = previous_layer.out**2
+        if previous_layer.power is not None:
+            sum_x_gd: torch.Tensor = previous_layer.out**2
 
-        e_p_mem: torch.Tensor = torch.sum(
-            self.functional_base(sum_x_gd, *noisy[2]).view(sum_x_gd.shape[0], -1), dim=(1)
-        )
-        e_p_tiap = torch.sum(
-            (((zp_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
-            dim=(1)
-        )
-        e_p_tiam = torch.sum(
-            (((zm_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
-            dim=(1)
-        )
+            e_p_mem: torch.Tensor = torch.sum(
+                self.functional_base(sum_x_gd, *noisy[2]).view(sum_x_gd.shape[0], -1), dim=(1)
+            )
+            e_p_tiap = torch.sum(
+                (((zp_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
+                dim=(1)
+            )
+            e_p_tiam = torch.sum(
+                (((zm_mu * self.tia_resistance) ** 2) / self.tia_resistance).view(sum_x_gd.shape[0], -1),
+                dim=(1)
+            )
 
-        previous_layer.power.add_(e_p_mem + e_p_tiap + e_p_tiam)
+            previous_layer.power.add_(e_p_mem + e_p_tiap + e_p_tiam)
 
         return MontecarloReturn(
             out=self.tia_resistance
@@ -146,6 +147,7 @@ class MemSELayer(nn.Module):
 
     def get_noisy(self, ct):
         noisy = []
+        assert self._crossbar.scaled is False
         for k, i in self.memristored.items():
             if k in self.memristored_real_shape:
                 i = self.memristored_real_shape[k]
@@ -164,5 +166,6 @@ class MemSELayer(nn.Module):
             ).to(i)
             Gpos = torch.clip(torch.where(sign_w > 0, abs_w, 0.0) + w_noise, min=0)
             Gneg = torch.clip(torch.where(sign_w < 0, abs_w, 0.0) + w_noise_n, min=0)
+            self._crossbar.rescale([Gpos, Gneg, abs_w])
             noisy.append((Gpos, Gneg, abs_w))
         return list(zip(*noisy))
