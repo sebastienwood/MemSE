@@ -111,6 +111,8 @@ class OFAxMemSE(nn.Module):
         active_crossbars.sort()
 
         model = self.model.get_active_subnet()
+        if hasattr(self, '_device'):
+            model = model.to(*self._device[0], **self._device[1])
         if not skip_adaptation:
             set_running_statistics(model, data_loader)
         self._model = MemSE(model, self.opmap, self.std_noise, self.N)
@@ -127,6 +129,9 @@ class OFAxMemSE(nn.Module):
         gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
         state = arch_config | {'gmax': gmax_clean}
         self._state = state
+
+        if hasattr(self, '_device'):
+            self._model = self._model.to(*self._device[0], **self._device[1])
         return state
 
     def set_active_subnet(self, arch, data_loader):
