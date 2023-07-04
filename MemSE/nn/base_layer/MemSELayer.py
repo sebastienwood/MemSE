@@ -147,7 +147,6 @@ class MemSELayer(nn.Module):
 
     def get_noisy(self, ct):
         noisy = []
-        old_shapes = {}
         assert self._crossbar.scaled is False
         for k, i in self.memristored.items():
             old_shape = i.shape
