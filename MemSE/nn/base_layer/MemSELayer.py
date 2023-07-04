@@ -147,8 +147,10 @@ class MemSELayer(nn.Module):
 
     def get_noisy(self, ct):
         noisy = []
+        old_shapes = {}
         assert self._crossbar.scaled is False
         for k, i in self.memristored.items():
+            old_shape = i.shape
             if k in self.memristored_real_shape:
                 i = self.memristored_real_shape[k]
             if i is None:
@@ -166,6 +168,6 @@ class MemSELayer(nn.Module):
             ).to(i)
             Gpos = torch.clip(torch.where(sign_w > 0, abs_w, 0.0) + w_noise, min=0)
             Gneg = torch.clip(torch.where(sign_w < 0, abs_w, 0.0) + w_noise_n, min=0)
-            self._crossbar.rescale([Gpos, Gneg, abs_w])
-            noisy.append((Gpos, Gneg, abs_w))
+            self._crossbar.rescale([Gpos.view(old_shape), Gneg.view(old_shape), abs_w.view(old_shape)])
+            noisy.append((Gpos.view(i.shape), Gneg.view(i.shape), abs_w.view(i.shape)))
         return list(zip(*noisy))
