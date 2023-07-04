@@ -22,8 +22,8 @@ class MemSE(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def quant(self, c_one:bool = False):
-        self.quanter.quant(c_one=c_one)
+    def quant(self, c_one:bool = False, scaled:bool = True):
+        self.quanter.quant(c_one=c_one, scaled=scaled)
 
     def unquant(self):
         self.quanter.unquant()
@@ -73,8 +73,8 @@ class OFAxMemSE(nn.Module):
         self._device = (args, kwargs)
         return super().to(*args, **kwargs)
 
-    def quant(self, c_one:bool = False):
-        self._model.quanter.quant(c_one=c_one)
+    def quant(self, c_one:bool = False, scaled: bool = True):
+        self._model.quanter.quant(c_one=c_one, scaled=scaled)
 
     def unquant(self):
         self._model.quanter.unquant()
