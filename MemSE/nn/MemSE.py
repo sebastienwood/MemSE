@@ -91,6 +91,7 @@ class OFAxMemSE(nn.Module):
     def sample_active_subnet(self, data_loader, skip_adaptation: bool = False, noisy: bool = True, arch=None):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
         # its also not very flexible as it only works for resnet
+        self.unquant()
         if arch is None:
             arch_config = self.model.sample_active_subnet()  # type: ignore
         else:
