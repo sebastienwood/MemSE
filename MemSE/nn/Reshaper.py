@@ -13,7 +13,7 @@ __all__ = ['Reshaper', 'Flattener']
 class Reshaper(MemSELayer):
     def initialize_from_module(self, shape: Iterable[int]) -> None:
         self.shape = shape
- 
+
     def functional_base(self, x, *args, **kwargs):
         return torch.reshape(x, (-1,) + self.shape)
 
