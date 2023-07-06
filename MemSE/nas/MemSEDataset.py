@@ -53,20 +53,19 @@ class AccuracyDataset:
         self, run_manager, ofa_network: OFAxMemSE, n_arch=1000, image_size_list=None
     ):
         # load net_id_list, random sample if not exist
-        # TODO lhs sampling
         if os.path.isfile(self.net_id_path):
             net_id_list = json.load(open(self.net_id_path))
         else:
             net_id_list = set()
-            while len(net_id_list) < n_arch:
+            while len(net_id_list) < n_arch * 50:
                 net_setting = ofa_network.sample_active_subnet(None, skip_adaptation=True, noisy=False)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
                 nb_cb = len(ofa_network.active_crossbars)
-                sampling = LHS(xlimits=([0.5] * nb_cb, [1.5] * nb_cb))
+                sampling = LHS(xlimits=np.array([[0.5, 1.5]] * nb_cb))
                 samples = sampling(50)
                 for options in range(len(samples)):
-                    gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]), ofa_network._model.quanter.Wmax)
+                    gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]).to(ofa_network._model.quanter.Wmax), ofa_network._model.quanter.Wmax).to('cpu')
                     gmax_clean = torch.zeros(ofa_network.gmax_size).scatter_(0, torch.LongTensor(ofa_network.active_crossbars), gmax).tolist()
                     net_setting |= {'gmax': gmax_clean}
                     net_id = net_setting2id(net_setting)
@@ -123,7 +122,7 @@ class AccuracyDataset:
                         continue
 
                     ofa_network.set_active_subnet(net_setting, data_loader)
-                    ofa_network.quant()
+                    ofa_network.quant(scaled=False)
 
                     loss, metrics = run_manager.validate(
                         net=ofa_network,
