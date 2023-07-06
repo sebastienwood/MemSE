@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from MemSE.nn.base_layer import MemSELayer, MemSEReturn
+from MemSE.nn.map import register_memse_mapping
 
 __all__ = ['Reshaper', 'Flattener']
 
@@ -12,7 +13,7 @@ __all__ = ['Reshaper', 'Flattener']
 class Reshaper(MemSELayer):
     def initialize_from_module(self, shape: Iterable[int]) -> None:
         self.shape = shape
- 
+
     def functional_base(self, x, *args, **kwargs):
         return torch.reshape(x, (-1,) + self.shape)
 
@@ -33,9 +34,15 @@ class Reshaper(MemSELayer):
         return MemSEReturn(x, pad_gamma, pad_gamma_shape, power)
 
 
+@register_memse_mapping()
 class Flattener(Reshaper):
     def initialize_from_module(self) -> None:
         pass
 
     def functional_base(self, x, *args, **kwargs):
         return torch.flatten(x, start_dim=1)
+
+    @classmethod
+    @property
+    def dropin_for(cls):
+        return set([torch.flatten])
