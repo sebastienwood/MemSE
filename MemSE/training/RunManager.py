@@ -58,7 +58,7 @@ class RunManager:
         self.run_config = run_config
         self.mode = mode
         self.test_criterion = nn.CrossEntropyLoss()
-        self._loader = self.load_dataset()
+        self._loader: dloader.Dataloader = self.load_dataset()
 
     def load_dataset(self):
         dataset_kwargs = {
