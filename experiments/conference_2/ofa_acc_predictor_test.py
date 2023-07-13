@@ -5,7 +5,7 @@ import numpy as np
 import math
 import csv
 import random
-from torchvision import transforms
+from torchvision import transforms, datasets
 from pathlib import Path
 from argparse import ArgumentParser
 
@@ -14,8 +14,6 @@ from ofa.nas.accuracy_predictor import AccuracyPredictor, ResNetArchEncoder
 from ofa.nas.efficiency_predictor import ResNet50FLOPsModel
 from ofa.imagenet_classification.elastic_nn.utils import set_running_statistics
 from ofa.utils import download_url
-
-from MemSE.training import RunManager, RunConfig
 
 device = torch.device('cuda:0')
 torch.backends.cudnn.benchmark = True
@@ -26,9 +24,6 @@ ofa_network = ofa_net('ofa_resnet50', pretrained=True)
 parser = ArgumentParser()
 parser.add_argument('--datapath', default=os.environ['DATASET_STORE'])
 args = parser.parse_args()
-
-run_config = RunConfig(dataset_root=args.datapath, dataset='ImageNet')
-run_manager = RunManager(run_config)
 
 def train_transform(image_size):
     return transforms.Compose(
@@ -43,15 +38,18 @@ def train_transform(image_size):
             ]
         )
 
-dataset = run_manager._loader.get_dataset(**run_manager._loader.TRAIN_KWARGS, transform=train_transform(128))
-dataset_valid = run_manager._loader.get_dataset(**run_manager._loader.VALID_KWARGS, transform=transforms.Compose(
-            [
-                transforms.Resize(int(math.ceil(128 / 0.875))),
-                transforms.CenterCrop(128),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ]
-        ))
+def test_transform(image_size):
+    return transforms.Compose(
+        [
+            transforms.Resize(int(math.ceil(image_size / 0.875))),
+            transforms.CenterCrop(image_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+
+dataset = datasets.ImageFolder(root=f'{args.datapath}/imagenet/train', transform=train_transform(128))
+dataset_valid = datasets.ImageFolder(root=f'{args.datapath}/imagenet/val', transform=test_transform(128))
 data_loader_valid = torch.utils.data.DataLoader(
     dataset_valid,
     batch_size=128,
@@ -151,14 +149,7 @@ def accuracy(output, target, topk=(1,)):
 def validate(net, image_size, data_loader, device="cuda:0"):
     net = net.to(device)
 
-    data_loader.dataset.transform = transforms.Compose(
-        [
-            transforms.Resize(int(math.ceil(image_size / 0.875))),
-            transforms.CenterCrop(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
+    data_loader.dataset.transform = test_transform(image_size)
 
     criterion = nn.CrossEntropyLoss().to(device)
 
@@ -209,10 +200,10 @@ for i in range(100):
     print(i, '\t', predicted_acc, '\t', '%.1fM MACs' % predicted_efficiency)
 
     subnet = ofa_network.get_active_subnet().to(device)
-    data_loader.dataset.transform(train_transform(image_size))
+    data_loader.dataset.transform = train_transform(image_size)
     set_running_statistics(subnet, data_loader)
 
-    top1_ofa, _ = validate(subnet, image_size, data_loader, device) # can switch with data_loader_valid at will
+    top1_ofa, _ = validate(subnet, image_size, data_loader_valid, device)
 
     with csv_path.open('a') as f:
         writer = csv.writer(f)
