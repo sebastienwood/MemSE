@@ -9,5 +9,6 @@ class RunConfig:
     dataset_bs: int = 128
     dataset_workers: int = 4
     dataset_imagesize: int = 32
+    dataset_distort_color: str = "tf"
 
     print_freq: int = 10

@@ -33,7 +33,7 @@ class Dataloader:
             self.IMAGE_SIZE = kwargs['imagesize']
 
         self.distort_color = kwargs.get('distortcolor', "None")
-        self.resize_scale = kwargs.get('resizescale', 0.8)
+        self.resize_scale = kwargs.get('resizescale', 0.08)
 
         self._valid_transform_dict = {}
         if isinstance(self.IMAGE_SIZE, list):

@@ -144,5 +144,6 @@ class RunManager:
                 end = time.time()
                 if not no_logs and i % self.run_config.print_freq == 0:
                     metrics.display(i + 1)
-        metrics.display_summary()
+        if not no_logs:
+            metrics.display_summary()
         return metrics.losses.avg, metrics
