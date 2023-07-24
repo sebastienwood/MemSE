@@ -1,7 +1,10 @@
 import os
+import csv
 import random
 import torch
 import argparse
+
+from pathlib import Path
 
 from ofa.nas.accuracy_predictor import AccuracyPredictor, ResNetArchEncoder
 from ofa.imagenet_classification.data_providers.imagenet import ImagenetDataProvider
@@ -12,7 +15,7 @@ from ofa.utils import download_url
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "-p", "--path", help="The path of imagenet", type=str, default=os.environ['DATASET_STORE']
+    "-p", "--path", help="The path of imagenet", type=str, default=f'{os.environ["DATASET_STORE"]}/imagenet'
 )
 parser.add_argument("-g", "--gpu", help="The gpu(s) to use", type=str, default="all")
 parser.add_argument(
@@ -67,22 +70,34 @@ acc_predictor = AccuracyPredictor(arch_encoder, 400, 3,
 """ Randomly sample a sub-network, 
     you can also manually set the sub-network using: 
         ofa_network.set_active_subnet(ks=7, e=6, d=4) 
+
 """
-subnet_config = ofa_network.sample_active_subnet()
-subnet = ofa_network.get_active_subnet(preserve_weight=True)
+csv_path = Path('comparison_accuracy.csv')
+if not csv_path.exists():
+    with csv_path.open('w') as f:
+        writer = csv.writer(f)
+        writer.writerow(['acc_pred', 'acc_ofa'])
 
-""" Test sampled subnet 
-"""
-run_manager = RunManager(".tmp/eval_subnet", subnet, run_config, init=False)
-# assign image size: 128, 132, ..., 224
-run_config.data_provider.assign_active_img_size(224)
-run_manager.reset_running_statistics(net=subnet)
+for _ in range(100):
+    subnet_config = ofa_network.sample_active_subnet()
+    img_size = random.choice(image_size_list)
+    subnet = ofa_network.get_active_subnet(preserve_weight=True)
 
-print("Test random subnet:")
-print(subnet.module_str)
+    """ Test sampled subnet 
+    """
+    run_manager = RunManager(".tmp/eval_subnet", subnet, run_config, init=False)
+    # assign image size: 128, 132, ..., 224
+    run_config.data_provider.assign_active_img_size(img_size)
+    run_manager.reset_running_statistics(net=subnet)
 
-loss, (top1, top5) = run_manager.validate(net=subnet)
-print("Results: loss=%.5f,\t top1=%.1f,\t top5=%.1f" % (loss, top1, top5))
+    #print("Test random subnet:")
+    #print(subnet.module_str)
 
-predicted_acc = acc_predictor.predict_acc([subnet_config])
-print("Predicted acc %.1f" % predicted_acc)
+    loss, (top1, top5) = run_manager.validate(net=subnet, no_logs=True)
+    print("Results: loss=%.5f,\t top1=%.1f,\t top5=%.1f" % (loss, top1, top5))
+
+    predicted_acc = acc_predictor.predict_acc([subnet_config | {'image_size': img_size}])
+    print("Predicted acc %.1f" % (predicted_acc * 100))
+    with csv_path.open('a') as f:
+        writer = csv.writer(f)
+        writer.writerow([predicted_acc.cpu().item() * 100, top1])
