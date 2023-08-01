@@ -12,6 +12,7 @@ class FORWARD_MODE(enum.Enum):
     BASE = enum.auto()
     MEMSE = enum.auto()
     MONTECARLO = enum.auto()
+    MONTECARLO_NOPOWER = enum.auto()
 
 
 @dataclass

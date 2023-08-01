@@ -69,14 +69,14 @@ class AverageMeter(object):
 
 class HistMeter(AverageMeter):
     # __slots__ = ('hist', 'histed')
-    def __init__(self, name, fmt=":f", histed="sum"):
-        super().__init__(name, fmt)
+    def __init__(self, name, fmt=":f", summary_type=Summary.AVERAGE, histed="avg"):
+        super().__init__(name, fmt, summary_type)
         self.histed = histed
         self.hist = []
 
     def update(self, val, n=1):
         super().update(val, n)
-        self.hist.append(getattr(self, self.histed))
+        self.hist.append(getattr(self, str(self.histed)))
 
 
 class TimingMeter(HistMeter, Timer):

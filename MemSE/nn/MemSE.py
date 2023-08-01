@@ -82,8 +82,8 @@ class OFAxMemSE(nn.Module):
     def forward(self, inp):
         return self._model.forward(inp)
 
-    def montecarlo_forward(self, inp):
-        return self._model.montecarlo_forward(inp)
+    def montecarlo_forward(self, inp, compute_power:bool=True):
+        return self._model.montecarlo_forward(inp, compute_power=compute_power)
 
     def memse_forward(self, inp):
         return self._model.memse_forward(inp)
@@ -137,13 +137,14 @@ class OFAxMemSE(nn.Module):
             self._model = self._model.to(*self._device[0], **self._device[1])
         return state
 
-    def set_active_subnet(self, arch, data_loader):
+    def set_active_subnet(self, arch, data_loader, skip_adaptation:bool=False):
         self._state = arch
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
         self.model.set_active_subnet(**arch)
         model = self.model.get_active_subnet()
-        set_running_statistics(model, data_loader)
+        if not skip_adaptation:
+            set_running_statistics(model, data_loader)
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=[g for g in gmax if g > 0])
         if hasattr(self, '_device'):
             self._model = self._model.to(*self._device[0], **self._device[1])

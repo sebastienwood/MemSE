@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from MemSE.nn import FORWARD_MODE, MemSE, OFAxMemSE
 import MemSE.training.Dataloaders as dloader
-from MemSE.misc import AverageMeter, accuracy, Summary, ProgressMeter
+from MemSE.misc import AverageMeter, accuracy, Summary, ProgressMeter, HistMeter
 from .RunConfig import RunConfig
 
 
@@ -13,12 +13,16 @@ __all__ = ['Metrics', 'RunManager']
 
 
 class Metrics:
-    def __init__(self, num_batches: int, prefix: str = "Loop: ") -> None:
-        self.batch_time = AverageMeter("Time", ":6.3f", Summary.NONE)
-        self.losses = AverageMeter("Loss", ":.4e", Summary.NONE)
-        self.top1 = AverageMeter("Acc@1", ":6.2f", Summary.AVERAGE)
-        self.top5 = AverageMeter("Acc@5", ":6.2f", Summary.AVERAGE)
-        self.power = AverageMeter("Power", ":.2e", Summary.AVERAGE)
+    def __init__(self, num_batches: int, prefix: str = "Loop: ", hist: bool = False) -> None:
+        if hist:
+            meter = HistMeter
+        else:
+            meter = AverageMeter
+        self.batch_time = meter("Time", ":6.3f", Summary.NONE)
+        self.losses = meter("Loss", ":.4e", Summary.NONE)
+        self.top1 = meter("Acc@1", ":6.2f", Summary.AVERAGE)
+        self.top5 = meter("Acc@5", ":6.2f", Summary.AVERAGE)
+        self.power = meter("Power", ":.2e", Summary.AVERAGE)
         self.progress = ProgressMeter(
             num_batches,
             [self.batch_time, self.losses, self.top1, self.top5],
@@ -87,9 +91,9 @@ class RunManager:
             memse_return = net.memse_forward(inp)
             output = memse_return.out
             raise ValueError("MemSE mode has not been fully implemented")
-        elif mode is FORWARD_MODE.MONTECARLO:
+        elif mode is FORWARD_MODE.MONTECARLO or FORWARD_MODE.MONTECARLO_NOPOWER:
             assert isinstance(net, (MemSE, OFAxMemSE))
-            memse_return = net.montecarlo_forward(inp)
+            memse_return = net.montecarlo_forward(inp, mode is FORWARD_MODE.MONTECARLO)
             output = memse_return.out
         else:
             output = net(inp)
@@ -112,6 +116,9 @@ class RunManager:
         no_logs=False,
         train_mode=False,
         mode:FORWARD_MODE=None,
+        hist_meters: bool = False,
+        nb_batchs: int = -1,
+        nb_batchs_power: int = -1,
     ):
         mode = self.mode if mode is None else mode
         net = net.to(self.device)
@@ -126,7 +133,7 @@ class RunManager:
         else:
             net.eval()
 
-        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ')
+        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ', hist=hist_meters)
 
         with torch.no_grad():
             end = time.time()
@@ -144,6 +151,10 @@ class RunManager:
                 end = time.time()
                 if not no_logs and i % self.run_config.print_freq == 0:
                     metrics.display(i + 1)
+                if nb_batchs > 0 and i > nb_batchs:
+                    break
+                if mode is FORWARD_MODE.MONTECARLO and nb_batchs_power > 0 and i > nb_batchs_power:
+                    mode = FORWARD_MODE.MONTECARLO_NOPOWER
         if not no_logs:
             metrics.display_summary()
         return metrics.losses.avg, metrics

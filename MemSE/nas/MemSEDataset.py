@@ -1,6 +1,7 @@
 # Adapted from https://github.com/mit-han-lab/once-for-all/blob/master/ofa/nas/accuracy_predictor/acc_dataset.py
 import json
 import os
+from MemSE.training import RunManager
 from MemSE.nn import OFAxMemSE
 from smt.sampling_methods import LHS
 import torch
@@ -50,26 +51,17 @@ class AccuracyDataset:
 
     # TODO: support parallel building
     def build_acc_dataset(
-        self, run_manager, ofa_network: OFAxMemSE, n_arch=1000, image_size_list=None
+        self, run_manager:RunManager, ofa_network: OFAxMemSE, n_arch=16000, image_size_list=None, range_LHS=1, nb_batchs=-1, nb_batchs_power=-1, nb_sample_LHS=50
     ):
         # load net_id_list, random sample if not exist
         if os.path.isfile(self.net_id_path):
             net_id_list = json.load(open(self.net_id_path))
         else:
             net_id_list = set()
-            while len(net_id_list) < n_arch * 50:
+            while len(net_id_list) < n_arch:
                 net_setting = ofa_network.sample_active_subnet(None, skip_adaptation=True, noisy=False)
                 net_id = net_setting2id(net_setting)
                 net_id_list.add(net_id)
-                nb_cb = len(ofa_network.active_crossbars)
-                sampling = LHS(xlimits=np.array([[0.5, 1.5]] * nb_cb))
-                samples = sampling(50)
-                for options in range(len(samples)):
-                    gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]).to(ofa_network._model.quanter.Wmax), ofa_network._model.quanter.Wmax).to('cpu')
-                    gmax_clean = torch.zeros(ofa_network.gmax_size).scatter_(0, torch.LongTensor(ofa_network.active_crossbars), gmax).tolist()
-                    net_setting |= {'gmax': gmax_clean}
-                    net_id = net_setting2id(net_setting)
-                    net_id_list.add(net_id)
             net_id_list = list(net_id_list)
             net_id_list.sort()
             json.dump(net_id_list, open(self.net_id_path, "w"), indent=4)
@@ -77,6 +69,10 @@ class AccuracyDataset:
         image_size_list = (
             [128, 160, 192, 224] if image_size_list is None else image_size_list
         )
+
+        nb_cb = len(ofa_network.active_crossbars)
+        sampling = LHS(xlimits=np.array([[1 - range_LHS / 2, 1 + range_LHS / 2]] * nb_cb))
+        samples = sampling(nb_sample_LHS)
 
         with tqdm(
             total=len(net_id_list) * len(image_size_list), desc="Building Acc Dataset"
@@ -107,42 +103,50 @@ class AccuracyDataset:
                     existing_acc_dict = {}
                 for net_id in net_id_list:
                     net_setting = net_id2setting(net_id)
-                    key = net_setting2id({**net_setting, "image_size": image_size})
-                    if key in existing_acc_dict:
-                        acc_dict[key] = existing_acc_dict[key]
+
+                    def val(skip_adaptation=False):
+                        key = net_setting2id({**net_setting, "image_size": image_size})
+                        if key in existing_acc_dict:
+                            acc_dict[key] = existing_acc_dict[key]
+                            t.set_postfix(
+                                {
+                                    "net_id": net_id,
+                                    "image_size": image_size,
+                                    "info_val": acc_dict[key],
+                                    "status": "loading",
+                                }
+                            )
+                            t.update()
+                            return
+                        ofa_network.set_active_subnet(net_setting, data_loader, skip_adaptation=skip_adaptation)
+                        ofa_network.quant(scaled=False)
+
+                        loss, metrics = run_manager.validate(
+                            net=ofa_network,
+                            data_loader=val_dataset,
+                            no_logs=True,
+                            nb_batchs=nb_batchs,
+                            nb_batchs_power=nb_batchs_power
+                        )
+                        info_val = metrics.top1.avg
+                        ofa_network.unquant()
+
                         t.set_postfix(
                             {
                                 "net_id": net_id,
                                 "image_size": image_size,
-                                "info_val": acc_dict[key],
-                                "status": "loading",
+                                "info_val": info_val,
                             }
                         )
                         t.update()
-                        continue
-
-                    ofa_network.set_active_subnet(net_setting, data_loader)
-                    ofa_network.quant(scaled=False)
-
-                    loss, metrics = run_manager.validate(
-                        net=ofa_network,
-                        data_loader=val_dataset,
-                        no_logs=True,
-                    )
-                    info_val = metrics.top1.avg
-                    ofa_network.unquant()
-
-                    t.set_postfix(
-                        {
-                            "net_id": net_id,
-                            "image_size": image_size,
-                            "info_val": info_val,
-                        }
-                    )
-                    t.update()
-
-                    acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
-                    json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
+                        acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
+                        json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
+                    val()
+                    for options in range(len(samples)):
+                        gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]).to(ofa_network._model.quanter.Wmax), ofa_network._model.quanter.Wmax).to('cpu')
+                        gmax_clean = torch.zeros(ofa_network.gmax_size).scatter_(0, torch.LongTensor(ofa_network.active_crossbars), gmax).tolist()
+                        net_setting |= {'gmax': gmax_clean}
+                        val(True)
 
     def merge_acc_dataset(self, image_size_list=None):
         # load existing data

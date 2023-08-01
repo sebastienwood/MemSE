@@ -1,5 +1,10 @@
-python experiments/conference_2/prototyping_2.py
+python experiments/conference_2/prototyping.py
 python experiments/conference_2/prototyping.py --image_size 128
 python experiments/conference_2/prototyping.py --image_size 160
 python experiments/conference_2/prototyping.py --image_size 192
 python experiments/conference_2/prototyping.py --image_size 224
+
+python experiments/conference_2/ofa_energy_vs_memse_power.py
+python experiments/conference_2/convergence_analysis.py
+
+python experiments/conference_2/prototyping_2.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1
