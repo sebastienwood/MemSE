@@ -104,7 +104,7 @@ class RunManager:
             losses=(loss.item(), inp.size(0)),
             top1=(acc1[0].item(), inp.size(0)),
             top5=(acc5[0].item(), inp.size(0)),
-            power=None if memse_return is None else (memse_return.power.mean().item(), inp.size(0))
+            power=None if memse_return is None or memse_return.power is None else (memse_return.power.mean().item(), inp.size(0))
         )
 
     def validate(
