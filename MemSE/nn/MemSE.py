@@ -28,7 +28,7 @@ class MemSE(nn.Module):
     def unquant(self):
         self.quanter.unquant()
 
-    def montecarlo_forward(self, x, compute_power: bool = True):
+    def montecarlo_forward(self, x, compute_power: bool = True) -> MontecarloReturn:
         assert self.quanter.quanted and not self.quanter.noised and not self.quanter.scaled, 'Need quanted (no rescale) and denoised'
         x = MontecarloReturn(out=x, power=torch.zeros(x.shape[0], device=x.device) if compute_power else None)
         return self.model(x)
@@ -82,7 +82,7 @@ class OFAxMemSE(nn.Module):
     def forward(self, inp):
         return self._model.forward(inp)
 
-    def montecarlo_forward(self, inp, compute_power:bool=True):
+    def montecarlo_forward(self, inp, compute_power:bool=True) -> MontecarloReturn:
         return self._model.montecarlo_forward(inp, compute_power=compute_power)
 
     def memse_forward(self, inp):
@@ -99,6 +99,32 @@ class OFAxMemSE(nn.Module):
             self.model.set_active_subnet(**arch)
             arch_config = arch
 
+        self.count_active_crossbars()
+        model = self.model.get_active_subnet()
+        if hasattr(self, '_device'):
+            model = model.to(*self._device[0], **self._device[1])
+        if not skip_adaptation:
+            set_running_statistics(model, data_loader)
+        self._model = MemSE(model, self.opmap, self.std_noise, self.N)
+        assert self._model.quanter.Wmax.numel() == len(self.active_crossbars)
+
+        if noisy:
+            gmax = torch.einsum("a,a->a", torch.zeros(len(self.active_crossbars)).normal_(1, 0.3), self._model.quanter.Wmax)
+        else:
+            gmax = self._model.quanter.Wmax.clone()
+        gmax.clamp_(1e-6)
+        self._model.quanter.init_gmax(gmax)
+        if hasattr(self, '_device'):
+            self._model = self._model.to(*self._device[0], **self._device[1])
+        gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(self.active_crossbars), gmax).tolist()
+        state = arch_config | {'gmax': gmax_clean}
+        self._state = state
+
+        if hasattr(self, '_device'):
+            self._model = self._model.to(*self._device[0], **self._device[1])
+        return state
+
+    def count_active_crossbars(self):
         # get currently active crossbars as mask
         # https://github.com/mit-han-lab/once-for-all/blob/a5381c1924d93e582e4a321b3432579507bf3d22/ofa/imagenet_classification/elastic_nn/networks/ofa_resnets.py#LL288C9-L291C35
         # (only valid for resnet)
@@ -112,39 +138,45 @@ class OFAxMemSE(nn.Module):
                 active_crossbars.extend(self.block_to_crossbar_map[idx])
         active_crossbars.sort()
         self.active_crossbars = active_crossbars
+        return active_crossbars
 
-        model = self.model.get_active_subnet()
-        if hasattr(self, '_device'):
-            model = model.to(*self._device[0], **self._device[1])
-        if not skip_adaptation:
-            set_running_statistics(model, data_loader)
-        self._model = MemSE(model, self.opmap, self.std_noise, self.N)
-        assert self._model.quanter.Wmax.numel() == len(active_crossbars)
+    def active_crossbars_mask_from_config(self, config_depth):
+        if 'd' in config_depth:
+            config_depth = config_depth['d']
+        active_crossbars = [0, 2, self.gmax_size - 1]
+        if config_depth[0] != max(self.model.depth_list):
+            active_crossbars.append(1)
+        for stage_id, (block_idx, d) in enumerate(zip(self.model.grouped_block_index, config_depth[1:])):
+            depth_param = max(self.model.depth_list) - d
+            active_idx = block_idx[: len(block_idx) - depth_param]
+            for idx in active_idx:
+                active_crossbars.extend(self.block_to_crossbar_map[idx])
+        active_crossbars.sort()
+        return torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), 1)
 
-        if noisy:
-            gmax = torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).normal_(1, 0.3), self._model.quanter.Wmax)
-        else:
-            gmax = self._model.quanter.Wmax.clone()
-        gmax.clamp_(1e-6)
-        self._model.quanter.init_gmax(gmax)
-        if hasattr(self, '_device'):
-            self._model = self._model.to(*self._device[0], **self._device[1])
-        gmax_clean = torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), gmax).tolist()
-        state = arch_config | {'gmax': gmax_clean}
-        self._state = state
+    @property
+    def gmax_mask(self):
+        return torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(self.active_crossbars), 1)
 
-        if hasattr(self, '_device'):
-            self._model = self._model.to(*self._device[0], **self._device[1])
-        return state
-
-    def set_active_subnet(self, arch, data_loader, skip_adaptation:bool=False):
+    def set_active_subnet(self, arch, data_loader, skip_adaptation:bool=False, mask_useless:bool=True):
         self._state = arch
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
         self.model.set_active_subnet(**arch)
+        self.count_active_crossbars()
         model = self.model.get_active_subnet()
         if not skip_adaptation:
             set_running_statistics(model, data_loader)
+        if len(gmax) == self.gmax_size:
+            gmax *= self.gmax_mask.numpy()
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=[g for g in gmax if g > 0])
         if hasattr(self, '_device'):
             self._model = self._model.to(*self._device[0], **self._device[1])
+
+    def random_gmax(self, arch):
+        assert 'gmax' not in arch
+        self.model.set_active_subnet(**arch)
+        active_crossbars = self.count_active_crossbars()
+        model = self.model.get_active_subnet()
+        model = MemSE(model, self.opmap, self.std_noise, self.N)
+        return torch.einsum("a,a->a", torch.zeros(len(active_crossbars)).uniform_(0.01, 2), model.quanter.Wmax)

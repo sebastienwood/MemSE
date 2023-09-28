@@ -23,7 +23,7 @@ args = parser.parse_args()
 device = torch.device('cuda:0')
 torch.backends.cudnn.benchmark = True
 
-run_config = RunConfig(dataset_root=args.datapath, dataset='ImageNet')
+run_config = RunConfig(dataset_root=args.datapath, dataset='ImageNetHF')
 run_manager = RunManager(run_config, mode=FORWARD_MODE.MONTECARLO)
 dataset = run_manager._loader.get_dataset(**run_manager._loader.VALID_KWARGS, transform=transforms.Compose(
             [
@@ -56,8 +56,6 @@ for batch in data_loader:
 
 ofa = ofa_net('ofa_resnet50', pretrained=True).to(device)
 ofaxmemse = OFAxMemSE(ofa).to(device)
-
-
 
 def evaluate_ofa_subnet(
     ofa_net, image_size, data_loader, state=None, resample:bool=False, device="cuda:0"
@@ -134,18 +132,18 @@ def validate(net, image_size, data_loader, device="cuda:0"):
     return top1.avg
 
 for _ in range(10):
-    state = ofaxmemse.sample_active_subnet(small_d, noisy=False)
-    ofa.set_active_subnet(**state)
-    print('BASE OFA')
-    evaluate_ofa_subnet(ofa, args.image_size, data_loader=data_loader)
-    print('XMEMSE')
-    evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader)
-    ofaxmemse.set_active_subnet(state, small_d)
-    evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader)
-    print('NOISY')
-    evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
-    evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
-    evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
+    state = ofaxmemse.sample_active_subnet(small_d, noisy=True)
+    ofaxmemse.quant()
+    print(ofaxmemse._model.quanter.Wmax)
+    # ofa.set_active_subnet(**state)
+    # print('BASE OFA')
+    # evaluate_ofa_subnet(ofa, args.image_size, data_loader=data_loader)
+    # print('XMEMSE')
+    # evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader)
+    # ofaxmemse.set_active_subnet(state, small_d)
+    # evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader)
+    # print('NOISY')
+    # evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
+    # evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
+    # evaluate_ofa_subnet(ofaxmemse, args.image_size, data_loader=data_loader, state=state, resample=True)
 
-# TODO tests with montecarlo forward
-# MemSEDataset.AccuracyDataset(ROOT / 'experiments/conference_2/results').build_acc_dataset(run_manager, ofaxmemse, image_size_list=args.image_size)

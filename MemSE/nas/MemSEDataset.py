@@ -1,6 +1,7 @@
 # Adapted from https://github.com/mit-han-lab/once-for-all/blob/master/ofa/nas/accuracy_predictor/acc_dataset.py
 import json
 import os
+from pathlib import Path
 from MemSE.training import RunManager
 from MemSE.nn import OFAxMemSE
 from smt.sampling_methods import LHS
@@ -48,6 +49,10 @@ class AccuracyDataset:
     @property
     def acc_dict_path(self):
         return os.path.join(self.path, "acc.dict")
+    
+    @property
+    def acc_dataset_path(self):
+        return os.path.join(self.path, "acc_dataset.pth")
 
     # TODO: support parallel building
     def build_acc_dataset(
@@ -66,16 +71,14 @@ class AccuracyDataset:
             net_id_list.sort()
             json.dump(net_id_list, open(self.net_id_path, "w"), indent=4)
 
+        if isinstance(image_size_list, int):
+            image_size_list = [image_size_list]
         image_size_list = (
             [128, 160, 192, 224] if image_size_list is None else image_size_list
         )
 
-        nb_cb = len(ofa_network.active_crossbars)
-        sampling = LHS(xlimits=np.array([[1 - range_LHS / 2, 1 + range_LHS / 2]] * nb_cb))
-        samples = sampling(nb_sample_LHS)
-
         with tqdm(
-            total=len(net_id_list) * len(image_size_list), desc="Building Acc Dataset"
+            total=len(net_id_list) * len(image_size_list) * nb_sample_LHS, desc="Building Acc Dataset"
         ) as t:
             for image_size in image_size_list:
                 # load val dataset into memory
@@ -99,26 +102,34 @@ class AccuracyDataset:
                 # load existing acc dict
                 if os.path.isfile(acc_save_path):
                     existing_acc_dict = json.load(open(acc_save_path, "r"))
+                    acc_dict |= existing_acc_dict
                 else:
                     existing_acc_dict = {}
                 for net_id in net_id_list:
                     net_setting = net_id2setting(net_id)
 
-                    def val(skip_adaptation=False):
+                    def val(net_setting, skip_adaptation=False):
                         key = net_setting2id({**net_setting, "image_size": image_size})
                         if key in existing_acc_dict:
-                            acc_dict[key] = existing_acc_dict[key]
                             t.set_postfix(
                                 {
-                                    "net_id": net_id,
+                                    "net_id": key,
                                     "image_size": image_size,
                                     "info_val": acc_dict[key],
                                     "status": "loading",
                                 }
                             )
                             t.update()
-                            return
-                        ofa_network.set_active_subnet(net_setting, data_loader, skip_adaptation=skip_adaptation)
+                            # Resume case: we need to adapt the network
+                            if not hasattr(ofa_network, 'active_crossbars'):
+                                ofa_network.sample_active_subnet(net_setting, data_loader)
+                            return False
+                        if skip_adaptation:
+                            ofa_network._model.quanter.Gmax = [gu for gu in net_setting['gmax'] if gu > 0]
+                            ofa_network._state = net_setting
+                        else:
+                            ofa_network.set_active_subnet(net_setting, data_loader)
+
                         ofa_network.quant(scaled=False)
 
                         loss, metrics = run_manager.validate(
@@ -133,20 +144,26 @@ class AccuracyDataset:
 
                         t.set_postfix(
                             {
-                                "net_id": net_id,
+                                "net_id": key,
                                 "image_size": image_size,
                                 "info_val": info_val,
                             }
                         )
                         t.update()
                         acc_dict.update({key: {'top1':info_val, 'power':metrics.power.avg}})
-                        json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
-                    val()
+                    not_already_exists = val(net_setting)
+                    if not_already_exists is not None and not not_already_exists:
+                        t.update(nb_sample_LHS)
+                        continue
+                    nb_cb = len(ofa_network.active_crossbars)
+                    sampling = LHS(xlimits=np.array([[1 - range_LHS / 2, 1 + range_LHS / 2]] * nb_cb))
+                    samples = sampling(nb_sample_LHS)
                     for options in range(len(samples)):
                         gmax = torch.einsum("a,a->a", torch.from_numpy(samples[options]).to(ofa_network._model.quanter.Wmax), ofa_network._model.quanter.Wmax).to('cpu')
                         gmax_clean = torch.zeros(ofa_network.gmax_size).scatter_(0, torch.LongTensor(ofa_network.active_crossbars), gmax).tolist()
                         net_setting |= {'gmax': gmax_clean}
-                        val(True)
+                        val(net_setting, True)
+                    json.dump(acc_dict, open(acc_save_path, "w"), indent=4)
 
     def merge_acc_dataset(self, image_size_list=None):
         # load existing data
@@ -168,32 +185,51 @@ class AccuracyDataset:
     def build_acc_data_loader(
         self, arch_encoder, n_training_sample=None, batch_size=256, n_workers=16
     ):
+        # TODO: save and load if it exists
         # load data
-        acc_dict = json.load(open(self.acc_dict_path))
-        X_all = []
-        Y_all = []
-        with tqdm(total=len(acc_dict), desc="Loading data") as t:
-            for k, v in acc_dict.items():
-                dic = json.loads(k)
-                X_all.append(arch_encoder.arch2feature(dic)) # TODO
-                Y_all.append(v / 100.0)  # range: 0 - 1
-                t.update()
-        base_acc = np.mean(Y_all)
-        # convert to torch tensor
-        X_all = torch.tensor(X_all, dtype=torch.float)
-        Y_all = torch.tensor(Y_all)
+        if not Path(self.acc_dataset_path).exists():
+            acc_dict = json.load(open(self.acc_dict_path))
+            X_all = []
+            Y_all = []
+            with tqdm(total=len(acc_dict), desc="Loading data") as t:
+                for k, v in acc_dict.items():
+                    dic = json.loads(k)
+                    X_all.append(arch_encoder.arch2feature(dic))
+                    Y_all.append([v['top1'] / 100.0, v['power']])  # range: 0 - 1
+                    t.update()
 
-        # random shuffle
-        shuffle_idx = torch.randperm(len(X_all))
-        X_all = X_all[shuffle_idx]
-        Y_all = Y_all[shuffle_idx]
+            # convert to torch tensor
+            X_all = torch.tensor(np.array(X_all), dtype=torch.float)
+            Y_all = torch.tensor(np.array(Y_all))
+            
+            # random shuffle
+            shuffle_idx = torch.randperm(len(X_all))
+            X_all = X_all[shuffle_idx]
+            Y_all = Y_all[shuffle_idx]
+            
+            # split data
+            idx = X_all.size(0) // 5 * 4 if n_training_sample is None else n_training_sample
+            val_idx = X_all.size(0) // 5 * 4
+            X_train, Y_train = X_all[:idx], Y_all[:idx]
+            X_test, Y_test = X_all[val_idx:], Y_all[val_idx:]
+            print("Train Size: %d," % len(X_train), "Valid Size: %d" % len(X_test))
+            
+            base_acc = torch.mean(Y_all[:, 0])
+            min_pow = torch.min(Y_all[:, 1])
+            max_pow = torch.max(Y_all[:, 1])
+            base_pow = torch.mean(Y_all[:, 1])
+            torch.save({'X_train': X_train, 'Y_train': Y_train, 'X_test': X_test, 'Y_test': Y_test, 'base_acc': base_acc, 'base_pow': base_pow, 'min_pow': min_pow, 'max_pow': max_pow}, self.acc_dataset_path)
 
-        # split data
-        idx = X_all.size(0) // 5 * 4 if n_training_sample is None else n_training_sample
-        val_idx = X_all.size(0) // 5 * 4
-        X_train, Y_train = X_all[:idx], Y_all[:idx]
-        X_test, Y_test = X_all[val_idx:], Y_all[val_idx:]
-        print("Train Size: %d," % len(X_train), "Valid Size: %d" % len(X_test))
+        loaded = torch.load(self.acc_dataset_path)
+        X_train = loaded['X_train']
+        X_test = loaded['X_test']
+        Y_train = loaded['Y_train']
+        Y_test = loaded['Y_test']
+
+        Y_train[:, 1] -= loaded['min_pow']
+        Y_train[:, 1] /= (loaded['max_pow'] - loaded['min_pow'])
+        Y_test[:, 1] -= loaded['min_pow']
+        Y_test[:, 1] /= (loaded['max_pow'] - loaded['min_pow'])
 
         # build data loader
         train_dataset = RegDataset(X_train, Y_train)
@@ -214,4 +250,4 @@ class AccuracyDataset:
             num_workers=n_workers,
         )
 
-        return train_loader, valid_loader, base_acc
+        return train_loader, valid_loader, loaded['base_acc'], loaded['base_pow']

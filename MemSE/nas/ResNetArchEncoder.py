@@ -1,15 +1,21 @@
 from ofa.imagenet_classification.networks import ResNets
+import numpy as np
+import random
+
 
 class ResNetArchEncoder:
     def __init__(
         self,
+        default_gmax=None,
         image_size_list=None,
         depth_list=None,
         expand_list=None,
         width_mult_list=None,
         base_depth_list=None,
+        nb_crossbars=None,
     ):
-        self.image_size_list = [224] if image_size_list is None else image_size_list
+        self.default_gmax = default_gmax
+        self.image_size_list = [128, 160, 192, 224] if image_size_list is None else image_size_list
         self.expand_list = [0.2, 0.25, 0.35] if expand_list is None else expand_list
         self.depth_list = [0, 1, 2] if depth_list is None else depth_list
         self.width_mult_list = (
@@ -19,6 +25,8 @@ class ResNetArchEncoder:
         self.base_depth_list = (
             ResNets.BASE_DEPTH_LIST if base_depth_list is None else base_depth_list
         )
+        self.nb_crossbars = 62 if nb_crossbars is None else nb_crossbars
+        assert self.nb_crossbars == len(self.default_gmax)
 
         """" build info dict """
         self.n_dim = 0
@@ -35,7 +43,7 @@ class ResNetArchEncoder:
         self.e_info = dict(id2val=[], val2id=[], L=[], R=[])
         self._build_info_dict(target="e")
         # gmax
-        self.gmax_info = dict(id2val=[], val2id=[], L=[], R=[])
+        self.gmax_info = dict(L=[], R=[])
         self._build_info_dict(target="gmax")
 
     @property
@@ -88,25 +96,18 @@ class ResNetArchEncoder:
                     self.n_dim += 1
                 target_dict["R"].append(self.n_dim)
         elif target == "gmax":
-            # TODO
             target_dict = self.gmax_info
-            choices = self.expand_list
-            for i in range(self.max_n_blocks):
-                target_dict["val2id"].append({})
-                target_dict["id2val"].append({})
-                target_dict["L"].append(self.n_dim)
-                for e in choices:
-                    target_dict["val2id"][i][e] = self.n_dim
-                    target_dict["id2val"][i][self.n_dim] = e
-                    self.n_dim += 1
-                target_dict["R"].append(self.n_dim)
+            target_dict["L"].append(self.n_dim)
+            target_dict["R"].append(self.n_dim + self.nb_crossbars)
+            self.n_dim += self.nb_crossbars
 
     def arch2feature(self, arch_dict):
-        d, e, w, r = (
+        d, e, w, r, g = (
             arch_dict["d"],
             arch_dict["e"],
             arch_dict["w"],
             arch_dict["image_size"],
+            arch_dict["gmax"],
         )
         input_stem_skip = 1 if d[0] > 0 else 0
         d = d[1:]
@@ -123,6 +124,8 @@ class ResNetArchEncoder:
             for j in range(start_pt, start_pt + depth):
                 feature[self.e_info["val2id"][j][e[j]]] = 1
             start_pt += max(self.depth_list) + base_depth
+
+        feature[self.gmax_info["L"][0]:self.gmax_info["R"][0]] = g
 
         return feature
 
@@ -190,17 +193,21 @@ class ResNetArchEncoder:
                 arch_dict["d"].append(d - self.base_depth_list[stage_id])
                 d, skipped = 0, 0
                 stage_id += 1
+
+        arch_dict["gmax"] = feature[self.gmax_info["L"]:self.gmax_info["R"]]
         return arch_dict
 
-    def random_sample_arch(self):
+    def random_sample_arch(self, model):
+        assert self.default_gmax is not None
+        d = [random.choice([0, 2])] + random.choices(self.depth_list, k=self.n_stage)
         return {
-            "d": [random.choice([0, 2])]
-            + random.choices(self.depth_list, k=self.n_stage),
+            "d": d,
             "e": random.choices(self.expand_list, k=self.max_n_blocks),
             "w": random.choices(
                 list(range(len(self.width_mult_list))), k=self.n_stage + 2
             ),
             "image_size": random.choice(self.image_size_list),
+            "gmax": np.random.uniform(low=0.5, high=1.5, size=self.nb_crossbars) * self.default_gmax.cpu().numpy() * model.active_crossbars_mask_from_config(d).numpy()
         }
 
     def mutate_resolution(self, arch_dict, mutate_prob):
@@ -208,7 +215,7 @@ class ResNetArchEncoder:
             arch_dict["image_size"] = random.choice(self.image_size_list)
         return arch_dict
 
-    def mutate_arch(self, arch_dict, mutate_prob):
+    def mutate_arch(self, arch_dict, mutate_prob, model):
         # input stem skip
         if random.random() < mutate_prob:
             arch_dict["d"][0] = random.choice([0, 2])
@@ -226,3 +233,9 @@ class ResNetArchEncoder:
         for i in range(len(arch_dict["e"])):
             if random.random() < mutate_prob:
                 arch_dict["e"][i] = random.choice(self.expand_list)
+        # gmax
+        for i in range(len(arch_dict["gmax"])):
+            if random.random() < mutate_prob:
+                arch_dict["gmax"][i] = np.random.uniform(0.5, 1.5) * arch_dict["gmax"][i]
+
+        arch_dict["gmax"] *= model.active_crossbars_mask_from_config(arch_dict["d"])
