@@ -7,14 +7,17 @@ python experiments/conference_2/prototyping.py --image_size 224
 python experiments/conference_2/ofa_energy_vs_memse_power.py
 python experiments/conference_2/convergence_analysis.py
 
-python experiments/conference_2/prototyping_2.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 128
-python experiments/conference_2/prototyping_2.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 160
-python experiments/conference_2/prototyping_2.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 192
-python experiments/conference_2/prototyping_2.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 224
+python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 128
+python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 160
+python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 192
+python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 224
 
-python experiments/conference_2/memsedataset.py
-python experiments/conference_2/memsedataset_eval.py
-python experiments/conference_2/eval_ofa_net.py
+python experiments/conference_2/predictor_train_memsedataset.py
+python experiments/conference_2/predictor_train_memsedataset.py --predictor SigmoidAccuracyPredictor
+
+python experiments/conference_2/ga_eval.py --dataset
 
 python experiments/conference_2/ga.py
-python experiments/conference_2/ga_eval.py
+python experiments/conference_2/ga.py --const_gmax
+python experiments/conference_2/ga.py --predictor SigmoidAccuracyPredictor
+python experiments/conference_2/ga.py --const_gmax --predictor SigmoidAccuracyPredictor

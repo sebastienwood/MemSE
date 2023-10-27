@@ -251,3 +251,15 @@ class AccuracyDataset:
         )
 
         return train_loader, valid_loader, loaded['base_acc'], loaded['base_pow']
+    
+    def inverse_transform_power(self, items):
+        if not hasattr(self, '_loaded_power_consts'):
+            loaded = torch.load(self.acc_dataset_path)
+            self._loaded_power_consts = loaded['min_pow'], loaded['max_pow']
+        return items * (self._loaded_power_consts[1] - self._loaded_power_consts[0]) + self._loaded_power_consts[0]
+    
+    def transform_power(self, items):
+        if not hasattr(self, '_loaded_power_consts'):
+            loaded = torch.load(self.acc_dataset_path)
+            self._loaded_power_consts = loaded['min_pow'], loaded['max_pow']
+        return (items -  self._loaded_power_consts[0]) / (self._loaded_power_consts[1] - self._loaded_power_consts[0])

@@ -26,7 +26,8 @@ class ResNetArchEncoder:
             ResNets.BASE_DEPTH_LIST if base_depth_list is None else base_depth_list
         )
         self.nb_crossbars = 62 if nb_crossbars is None else nb_crossbars
-        assert self.nb_crossbars == len(self.default_gmax)
+        if self.default_gmax is not None:
+            assert self.nb_crossbars == len(self.default_gmax)
 
         """" build info dict """
         self.n_dim = 0
@@ -197,25 +198,28 @@ class ResNetArchEncoder:
         arch_dict["gmax"] = feature[self.gmax_info["L"]:self.gmax_info["R"]]
         return arch_dict
 
-    def random_sample_arch(self, model):
+    def random_sample_arch(self, model, const_gmax:bool=False):
         assert self.default_gmax is not None
         d = [random.choice([0, 2])] + random.choices(self.depth_list, k=self.n_stage)
-        return {
+        arch = {
             "d": d,
             "e": random.choices(self.expand_list, k=self.max_n_blocks),
             "w": random.choices(
                 list(range(len(self.width_mult_list))), k=self.n_stage + 2
             ),
             "image_size": random.choice(self.image_size_list),
-            "gmax": np.random.uniform(low=0.5, high=1.5, size=self.nb_crossbars) * self.default_gmax.cpu().numpy() * model.active_crossbars_mask_from_config(d).numpy()
+            "gmax": (np.random.uniform(low=0.5, high=1.5, size=self.nb_crossbars) if not const_gmax else 1.) * self.default_gmax.cpu().numpy() * model.gmax_masks[tuple(d)].numpy()
         }
+        # gmax = model.set_active_subnet(arch, skip_adaptation=True)
+        # arch['gmax'] = gmax
+        return arch
 
     def mutate_resolution(self, arch_dict, mutate_prob):
         if random.random() < mutate_prob:
             arch_dict["image_size"] = random.choice(self.image_size_list)
         return arch_dict
 
-    def mutate_arch(self, arch_dict, mutate_prob, model):
+    def mutate_arch(self, arch_dict, mutate_prob, model, const_gmax:bool=False):
         # input stem skip
         if random.random() < mutate_prob:
             arch_dict["d"][0] = random.choice([0, 2])
@@ -223,6 +227,7 @@ class ResNetArchEncoder:
         for i in range(1, len(arch_dict["d"])):
             if random.random() < mutate_prob:
                 arch_dict["d"][i] = random.choice(self.depth_list)
+
         # width_mult
         for i in range(len(arch_dict["w"])):
             if random.random() < mutate_prob:
@@ -233,9 +238,18 @@ class ResNetArchEncoder:
         for i in range(len(arch_dict["e"])):
             if random.random() < mutate_prob:
                 arch_dict["e"][i] = random.choice(self.expand_list)
-        # gmax
-        for i in range(len(arch_dict["gmax"])):
-            if random.random() < mutate_prob:
-                arch_dict["gmax"][i] = np.random.uniform(0.5, 1.5) * arch_dict["gmax"][i]
 
-        arch_dict["gmax"] *= model.active_crossbars_mask_from_config(arch_dict["d"])
+        # gmax
+        # if 0 -> set to random from default variation
+        # else: random mutation
+        for i in range(len(arch_dict["gmax"])):
+            r = np.random.uniform(0.5, 1.5) if not const_gmax else 1.
+            if arch_dict["gmax"][i] == 0:
+                arch_dict["gmax"][i] = r * self.default_gmax.cpu().numpy()[i]
+            elif random.random() < mutate_prob:
+                arch_dict["gmax"][i] = r * arch_dict["gmax"][i]
+
+        # set to 0 if unused
+        #gmax = model.set_active_subnet(arch_dict, skip_adaptation=True)
+        arch_dict['gmax'] = np.clip(arch_dict["gmax"], 0.5 * self.default_gmax.cpu().numpy(), 1.5 * self.default_gmax.cpu().numpy())
+        arch_dict['gmax'] *= model.gmax_masks[tuple(arch_dict["d"])].numpy()

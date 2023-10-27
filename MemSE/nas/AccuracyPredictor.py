@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = ["AccuracyPredictor"]
+__all__ = ["AccuracyPredictor", "SigmoidAccuracyPredictor", "AccuracyPredictorFactory"]
 
 
 class AccuracyPredictor(nn.Module):
@@ -56,3 +56,14 @@ class AccuracyPredictor(nn.Module):
         X = [self.arch_encoder.arch2feature(arch_dict) for arch_dict in arch_dict_list]
         X = torch.tensor(np.array(X)).float().to(self.device)
         return self.forward(X)
+
+
+class SigmoidAccuracyPredictor(AccuracyPredictor):
+    def forward(self, x):
+        return torch.sigmoid(AccuracyPredictor.forward(self, x))
+
+
+AccuracyPredictorFactory = {
+    'AccuracyPredictor': AccuracyPredictor,
+    'SigmoidAccuracyPredictor': SigmoidAccuracyPredictor
+}

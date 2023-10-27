@@ -2,6 +2,7 @@ import copy
 from typing import Optional
 import torch
 import torch.nn as nn
+import itertools
 from MemSE.fx import cast_to_memse
 from MemSE.nn import MontecarloReturn, MemSEReturn, MEMSE_MAP
 from MemSE import MemristorQuant
@@ -10,6 +11,7 @@ from ofa.imagenet_classification.elastic_nn.modules.dynamic_layers import (
     DynamicLinearLayer,
     DynamicConv2d
 )
+from ofa.imagenet_classification.networks import ResNets
 from ofa.imagenet_classification.elastic_nn.utils import set_running_statistics
 
 
@@ -68,6 +70,12 @@ class OFAxMemSE(nn.Module):
                     offset = 3
                 self.block_to_crossbar_map[idx] = [offset + v for v in range(count_layers(self.model.blocks[idx]))]
         print('OFAxMemSE initialized with ', self.gmax_size, ' crossbars')
+        # for all combs generate and store gmax mask (k=d)
+        # TODO resnet dependant
+        self.gmax_masks = {}
+        for d in itertools.product([0, 2], *[self.model.depth_list for _ in range(0, len(ResNets.BASE_DEPTH_LIST))]):
+            self.sample_active_subnet(arch={'d': d}, skip_adaptation=True)
+            self.gmax_masks[d] = self.gmax_mask()
 
     def to(self, *args, **kwargs):
         self._device = (args, kwargs)
@@ -88,7 +96,7 @@ class OFAxMemSE(nn.Module):
     def memse_forward(self, inp):
         return self._model.memse_forward(inp)
 
-    def sample_active_subnet(self, data_loader, skip_adaptation: bool = False, noisy: bool = True, arch=None):
+    def sample_active_subnet(self, data_loader = None, skip_adaptation: bool = False, noisy: bool = True, arch=None):
         # TODO this static cast may be inefficient, but we'd need to rewrite OFA's (conv, bn) to dynamically fuse them
         # its also not very flexible as it only works for resnet
         if hasattr(self, '_model'):
@@ -104,6 +112,7 @@ class OFAxMemSE(nn.Module):
         if hasattr(self, '_device'):
             model = model.to(*self._device[0], **self._device[1])
         if not skip_adaptation:
+            assert data_loader is not None
             set_running_statistics(model, data_loader)
         self._model = MemSE(model, self.opmap, self.std_noise, self.N)
         assert self._model.quanter.Wmax.numel() == len(self.active_crossbars)
@@ -140,25 +149,10 @@ class OFAxMemSE(nn.Module):
         self.active_crossbars = active_crossbars
         return active_crossbars
 
-    def active_crossbars_mask_from_config(self, config_depth):
-        if 'd' in config_depth:
-            config_depth = config_depth['d']
-        active_crossbars = [0, 2, self.gmax_size - 1]
-        if config_depth[0] != max(self.model.depth_list):
-            active_crossbars.append(1)
-        for stage_id, (block_idx, d) in enumerate(zip(self.model.grouped_block_index, config_depth[1:])):
-            depth_param = max(self.model.depth_list) - d
-            active_idx = block_idx[: len(block_idx) - depth_param]
-            for idx in active_idx:
-                active_crossbars.extend(self.block_to_crossbar_map[idx])
-        active_crossbars.sort()
-        return torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(active_crossbars), 1)
-
-    @property
     def gmax_mask(self):
         return torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(self.active_crossbars), 1)
 
-    def set_active_subnet(self, arch, data_loader, skip_adaptation:bool=False, mask_useless:bool=True):
+    def set_active_subnet(self, arch, data_loader=None, skip_adaptation:bool=False):
         self._state = arch
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
@@ -166,12 +160,14 @@ class OFAxMemSE(nn.Module):
         self.count_active_crossbars()
         model = self.model.get_active_subnet()
         if not skip_adaptation:
+            assert data_loader is not None
             set_running_statistics(model, data_loader)
         if len(gmax) == self.gmax_size:
-            gmax *= self.gmax_mask.numpy()
+            gmax *= self.gmax_mask().numpy()
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=[g for g in gmax if g > 0])
         if hasattr(self, '_device'):
             self._model = self._model.to(*self._device[0], **self._device[1])
+        return gmax
 
     def random_gmax(self, arch):
         assert 'gmax' not in arch
