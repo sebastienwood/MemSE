@@ -13,15 +13,15 @@ __all__ = ['Metrics', 'RunManager']
 
 
 class Metrics:
-    def __init__(self, num_batches: int, prefix: str = "Loop: ", hist: bool = False) -> None:
+    def __init__(self, num_batches: int, prefix: str = "Loop: ", hist: bool = False, **kwargs) -> None:
         if hist:
             meter = HistMeter
         else:
             meter = AverageMeter
         self.batch_time = meter("Time", ":6.3f", Summary.NONE)
-        self.losses = meter("Loss", ":.4e", Summary.NONE)
-        self.top1 = meter("Acc@1", ":6.2f", Summary.AVERAGE)
-        self.top5 = meter("Acc@5", ":6.2f", Summary.AVERAGE)
+        self.losses = meter("Loss", ":.4e", Summary.NONE, **kwargs)
+        self.top1 = meter("Acc@1", ":6.2f", Summary.AVERAGE, **kwargs)
+        self.top5 = meter("Acc@5", ":6.2f", Summary.AVERAGE, **kwargs)
         self.power = meter("Power", ":.2e", Summary.AVERAGE)
         self.progress = ProgressMeter(
             num_batches,
@@ -133,7 +133,7 @@ class RunManager:
         else:
             net.eval()
 
-        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ', hist=hist_meters)
+        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ', hist=hist_meters, histed='val')
 
         with torch.no_grad():
             end = time.time()

@@ -13,7 +13,7 @@ class ResNetArchEncoder:
         width_mult_list=None,
         base_depth_list=None,
         nb_crossbars=None,
-    ):
+    ) -> None:
         self.default_gmax = default_gmax
         self.image_size_list = [128, 160, 192, 224] if image_size_list is None else image_size_list
         self.expand_list = [0.2, 0.25, 0.35] if expand_list is None else expand_list
@@ -132,8 +132,7 @@ class ResNetArchEncoder:
 
     def feature2arch(self, feature):
         img_sz = self.r_info["id2val"][
-            int(np.argmax(feature[self.r_info["L"][0] : self.r_info["R"][0]]))
-            + self.r_info["L"][0]
+            int(np.argmax(feature[self.r_info["L"][0] : self.r_info["R"][0]])) + self.r_info["L"][0]
         ]
         input_stem_skip = (
             self.input_stem_d_info["id2val"][
@@ -198,7 +197,7 @@ class ResNetArchEncoder:
         arch_dict["gmax"] = feature[self.gmax_info["L"]:self.gmax_info["R"]]
         return arch_dict
 
-    def random_sample_arch(self, model, const_gmax:bool=False):
+    def random_sample_arch(self, model, const_gmax:bool=False) -> dict:
         assert self.default_gmax is not None
         d = [random.choice([0, 2])] + random.choices(self.depth_list, k=self.n_stage)
         arch = {
@@ -213,6 +212,48 @@ class ResNetArchEncoder:
         # gmax = model.set_active_subnet(arch, skip_adaptation=True)
         # arch['gmax'] = gmax
         return arch
+
+    def arch_vars(self, const:bool=False) -> dict:
+        from pymoo.core.variable import Real, Integer, Binary, Choice
+        arch_vars = {
+            "d_0": Choice(options=[0, 2]),
+            "image_size": Choice(options=self.image_size_list),
+        }
+        for i in range(self.n_stage):
+            arch_vars[f"d_{i+1}"] = Choice(options=self.depth_list)
+        for i in range(self.max_n_blocks):
+            arch_vars[f"e_{i}"] = Choice(options=self.expand_list)
+        for i in range(self.n_stage + 2):
+            arch_vars[f"w_{i}"] = Choice(options=list(range(len(self.width_mult_list))))
+        if not const:
+            d_gmax = self.default_gmax.cpu()
+            for i in range(self.nb_crossbars):
+                arch_vars[f"gmax_{i}"] = Real(bounds=(0.5 * d_gmax[i].item(), 1.5 * d_gmax[i].item()))
+        return arch_vars
+
+    def cat_arch_vars(self, arch_vars: dict) -> dict:
+        arch_vars_res = {'image_size': arch_vars['image_size']}
+        d = []
+        for i in range(self.n_stage + 1):
+            d.append(arch_vars[f"d_{i}"])
+        arch_vars_res["d"] = d
+        e = []
+        for i in range(self.max_n_blocks):
+            e.append(arch_vars[f"e_{i}"])
+        arch_vars_res["e"] = e
+        w = []
+        for i in range(self.n_stage + 2):
+            w.append(arch_vars[f"w_{i}"])
+        arch_vars_res["w"] = w
+        
+        if "gmax_0" in arch_vars:
+            gmax = np.zeros_like(self.default_gmax.cpu().numpy())
+            for i in range(self.nb_crossbars):
+                gmax[i] = arch_vars[f"gmax_{i}"]
+        else:
+            gmax = np.copy(self.default_gmax)
+        arch_vars_res["gmax"] = gmax
+        return arch_vars_res
 
     def mutate_resolution(self, arch_dict, mutate_prob):
         if random.random() < mutate_prob:
