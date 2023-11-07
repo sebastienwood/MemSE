@@ -21,8 +21,8 @@ class RepairGmax(Repair):
             return arch_dict
         
         for a in arch_dict:
-            a_cc = problem.arch_encoder.cat_arch_vars(a)
-            m = problem.model.gmax_masks[tuple(a_cc["d"])].numpy()
+            d = problem.arch_encoder.cat_d_vars(a)
+            m = problem.model.gmax_masks[tuple(d)].numpy()
             for i in range(len(m)):
                 if m[i] == 0:
                     a[f'gmax_{i}'] = 0.
@@ -155,7 +155,7 @@ class MemSEProblem(Problem):
         with torch.no_grad():
             out = self.surrogate.predict_acc(arch_dict)
             out[:, 1] *= -1 # we are minimizing both f
-        return out
+        return out.cpu()
     
     
 class RankAndCrowdingSurvivalWithRejected(RankAndCrowdingSurvival):
@@ -208,7 +208,8 @@ class NSGA2AdvanceCriterion(NSGA2):
         #TODO hold a nb_batch property on each individual
         # here, if nb_batch < problem.n
         # setget on an individual is the way to populate this data -> should be in the out dictionnary
-        # evaluate pop
+        # evaluate pop 
+        # self.evaluator.eval(self.problem, pop)
 
         # merge the offsprings with the current population
         if infills is not None:

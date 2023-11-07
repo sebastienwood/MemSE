@@ -17,6 +17,7 @@ class Metrics:
         if hist:
             meter = HistMeter
         else:
+            kwargs.pop('histed', None)
             meter = AverageMeter
         self.batch_time = meter("Time", ":6.3f", Summary.NONE)
         self.losses = meter("Loss", ":.4e", Summary.NONE, **kwargs)
@@ -133,7 +134,7 @@ class RunManager:
         else:
             net.eval()
 
-        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ', hist=hist_meters, histed='val')
+        metrics = Metrics(len(data_loader), f'Validation epoch {epoch}: ', hist=hist_meters)
 
         with torch.no_grad():
             end = time.time()

@@ -237,7 +237,7 @@ class ResNetArchEncoder:
             d.append(arch_vars[f"d_{i}"])
         return d
 
-    def cat_arch_vars(self, arch_vars: dict, gmax_masks: dict) -> dict:
+    def cat_arch_vars(self, arch_vars: dict, gmax_masks: dict = None) -> dict:
         arch_vars_res = {'image_size': arch_vars['image_size']}
         arch_vars_res["d"] = self.cat_d_vars(arch_vars)
         e = []
@@ -254,6 +254,7 @@ class ResNetArchEncoder:
             for i in range(self.nb_crossbars):
                 gmax[i] = arch_vars[f"gmax_{i}"]
         else:
+            assert gmax_masks is not None
             gmax = np.copy(self.default_gmax) * gmax_masks[tuple(arch_vars_res["d"])].numpy()
         arch_vars_res["gmax"] = gmax
         return arch_vars_res

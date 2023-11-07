@@ -52,8 +52,9 @@ print("Loaded")
 problem = MemSEProblem(
     memse, encoder, BatchPicker(), surrogate=predictor, const=args.const_gmax
 )
+
 algorithm = NSGA2AdvanceCriterion(
-    pop_size=16000,
+    pop_size=1000,
     sampling=MixedVariableSampling(),
     mating=CausalMixedVariableMating(
         eliminate_duplicates=MixedVariableDuplicateElimination(), repair=RepairGmax()
@@ -65,7 +66,7 @@ algorithm = NSGA2AdvanceCriterion(
 res = minimize(problem, algorithm, ("n_gen", 500), seed=1, verbose=True)
 
 print("Best solution found: \nX = %s\nF = %s\nCV = %s" % (res.X, res.F, res.CV))
-results = {i: (None, (None, encoder.cat_arch_vars(d), None)) for i, d in enumerate(res)}
+results = {i: (None, (None, encoder.cat_arch_vars(d, memse.gmax_masks), None)) for i, d in enumerate(res.X)}
 
 torch.save(
     results,
@@ -83,7 +84,7 @@ for const, res in results.items():
     arch = bi[1]
     print(arch)
     print(len(arch["gmax"]))
-    run_manager._loader.assign_active_img_size(arch["image_size"])
+    run_manager._loader.assign_active_img_size(int(arch["image_size"]))
     data_loader = run_manager._loader.build_sub_train_loader(
         n_images=2000, batch_size=256
     )
