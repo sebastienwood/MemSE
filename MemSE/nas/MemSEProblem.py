@@ -4,17 +4,22 @@ from pymoo.core.mixed import MixedVariableMating
 from pymoo.algorithms.moo.nsga2 import NSGA2, RankAndCrowdingSurvival, calc_crowding_distance, randomized_argsort
 
 import math
+import torch
 import numpy as np
 from pymoo.core.individual import Individual
 from pymoo.core.population import Population
 from pymoo.core.variable import Choice, Real, Integer
 
 
-__all__ = ["RepairGmax", "CausalMixedVariableMating", "MemSEProblem", "NSGA2AdvanceCriterion"]
+__all__ = ["RepairGmax", "CausalMixedVariableMating", "MemSEProblem", "NSGA2AdvanceCriterion", "RankAndCrowdingSurvivalWithRejected"]
 
 
 class RepairGmax(Repair):
     def _do(self, problem, arch_dict, **kwargs):
+        # Handle const. case
+        if problem.const:
+            return arch_dict
+        
         for a in arch_dict:
             a_cc = problem.arch_encoder.cat_arch_vars(a)
             m = problem.model.gmax_masks[tuple(a_cc["d"])].numpy()
@@ -80,13 +85,22 @@ class CausalMixedVariableMating(MixedVariableMating):
 
             _off = crossover(_problem, _parents, **kwargs)
             
-            if 'gmax' in str(list_of_vars[0]):
-                print(list_of_vars)
-                print(_parents)
-                print(_off)
+            if 'gmax' in list_of_vars[0]: # treating the vector gmax if it exists
+                for cple_id, couple in enumerate(_parents):
+                    par = pop[cple_id]
+                    m1 = problem.model.gmax_masks[tuple(problem.arch_encoder.cat_d_vars(par[0].X))].numpy().astype(bool)
+                    m2 = problem.model.gmax_masks[tuple(problem.arch_encoder.cat_d_vars(par[1].X))].numpy().astype(bool)
+                    g1 = couple[0].X
+                    g2 = couple[1].X
+                    for chld_id, children in enumerate(_off[XOVER_N_OFFSPRINGS*cple_id:XOVER_N_OFFSPRINGS*(cple_id+1)]):
+                        mm = problem.model.gmax_masks[tuple(problem.arch_encoder.cat_d_vars(off[chld_id].X))].numpy().astype(bool)
+                        gm = children.X
+                        new_gm = (m1 & m2) * gm + (m1 & ~m2 & mm) * g1 + (~m1 & m2 & mm) * g2
+                        children.X = new_gm
+                        
 
             mutation = self.mutation[clazz]
-            _off = mutation(_problem, _off, **kwargs) # post mutation is repair done by super().do
+            _off = mutation(_problem, _off, **kwargs)
 
             for k in range(n_offsprings):
                 for i, name in enumerate(list_of_vars):
@@ -108,15 +122,19 @@ class MemSEProblem(Problem):
             assert arch_encoder.default_gmax is not None
 
     def _evaluate(self, arch_dict, out, *args, **kwargs):
-        arch_dict = [self.arch_encoder.cat_arch_vars(a) for a in arch_dict]
+        arch_dict = [self.arch_encoder.cat_arch_vars(a, self.model.gmax_masks) for a in arch_dict]
         out["F"] = self.evaluate_with_surrogate(arch_dict)
         
-    def set_n(self):
+    def set_n(self, pop_size=None):
         if not hasattr(self, 'delta'):
             self.delta = 5.0
         else:
             self.delta *= 0.9
         self.n = self.batch_picker.get_pareto_interp(self.delta)
+        
+        if not hasattr(self, 'pop_size_init') and pop_size is not None:
+            self.pop_size_init = pop_size
+        return pop_size
 
     def evaluate_with_simulation(self, arch_dict):
         assert False
@@ -174,14 +192,23 @@ class RankAndCrowdingSurvivalWithRejected(RankAndCrowdingSurvival):
             # extend the survivors by all or selected individuals
             survivors.extend(front[I])
         
-        rejected = list(set(np.arange(len(pop.shape[0]))) - set(survivors))
+        rejected = list(set(np.arange(pop.shape[0])) - set(survivors))
         return pop[survivors], pop[rejected]
 
 
 class NSGA2AdvanceCriterion(NSGA2):
+    def _initialize_advance(self, infills=None, **kwargs):
+        if self.advance_after_initial_infill:
+            self.pop, _ = self.survival.do(self.problem, infills, n_survive=len(infills), algorithm=self, **kwargs)
+    
     def _advance(self, infills=None, **kwargs):
         # the current population
         pop = self.pop
+        
+        #TODO hold a nb_batch property on each individual
+        # here, if nb_batch < problem.n
+        # setget on an individual is the way to populate this data -> should be in the out dictionnary
+        # evaluate pop
 
         # merge the offsprings with the current population
         if infills is not None:
@@ -194,7 +221,8 @@ class NSGA2AdvanceCriterion(NSGA2):
         pop_median = np.median(self.pop.get("F").astype(float, copy=False)[:, 1])
         rej_best = max(rejected.get("F").astype(float, copy=False)[:, 1])
         if pop_median - rej_best < self.problem.delta:
-            self.problem.set_n()
+            new_pop_size = self.problem.set_n(self.pop_size)
+            self.pop_size = new_pop_size
 
 
 if __name__ == '__main__':

@@ -214,7 +214,7 @@ class ResNetArchEncoder:
         return arch
 
     def arch_vars(self, const:bool=False) -> dict:
-        from pymoo.core.variable import Real, Integer, Binary, Choice
+        from pymoo.core.variable import Real, Choice
         arch_vars = {
             "d_0": Choice(options=[0, 2]),
             "image_size": Choice(options=self.image_size_list),
@@ -230,13 +230,16 @@ class ResNetArchEncoder:
             for i in range(self.nb_crossbars):
                 arch_vars[f"gmax_{i}"] = Real(bounds=(0.5 * d_gmax[i].item(), 1.5 * d_gmax[i].item()))
         return arch_vars
-
-    def cat_arch_vars(self, arch_vars: dict) -> dict:
-        arch_vars_res = {'image_size': arch_vars['image_size']}
+    
+    def cat_d_vars(self, arch_vars: dict) -> list:
         d = []
         for i in range(self.n_stage + 1):
             d.append(arch_vars[f"d_{i}"])
-        arch_vars_res["d"] = d
+        return d
+
+    def cat_arch_vars(self, arch_vars: dict, gmax_masks: dict) -> dict:
+        arch_vars_res = {'image_size': arch_vars['image_size']}
+        arch_vars_res["d"] = self.cat_d_vars(arch_vars)
         e = []
         for i in range(self.max_n_blocks):
             e.append(arch_vars[f"e_{i}"])
@@ -251,7 +254,7 @@ class ResNetArchEncoder:
             for i in range(self.nb_crossbars):
                 gmax[i] = arch_vars[f"gmax_{i}"]
         else:
-            gmax = np.copy(self.default_gmax)
+            gmax = np.copy(self.default_gmax) * gmax_masks[tuple(arch_vars_res["d"])].numpy()
         arch_vars_res["gmax"] = gmax
         return arch_vars_res
 
