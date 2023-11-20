@@ -153,21 +153,18 @@ class OFAxMemSE(nn.Module):
         return torch.zeros(self.gmax_size).scatter_(0, torch.LongTensor(self.active_crossbars), 1)
 
     def set_active_subnet(self, arch, data_loader=None, skip_adaptation:bool=False):
+        """Breaking change: expects a valid gmax, will not check for validity"""
         self._state = arch
         arch = copy.deepcopy(arch)
         gmax = arch.pop('gmax')
         self.model.set_active_subnet(**arch)
-        self.count_active_crossbars()
         model = self.model.get_active_subnet()
         if not skip_adaptation:
             assert data_loader is not None
             set_running_statistics(model, data_loader)
-        if len(gmax) == self.gmax_size:
-            gmax *= self.gmax_mask().numpy()
         self._model = MemSE(model, self.opmap, self.std_noise, self.N, gu=[g for g in gmax if g > 0])
         if hasattr(self, '_device'):
             self._model = self._model.to(*self._device[0], **self._device[1])
-        return gmax
 
     def random_gmax(self, arch):
         assert 'gmax' not in arch

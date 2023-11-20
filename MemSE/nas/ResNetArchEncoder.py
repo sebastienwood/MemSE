@@ -209,8 +209,6 @@ class ResNetArchEncoder:
             "image_size": random.choice(self.image_size_list),
             "gmax": (np.random.uniform(low=0.5, high=1.5, size=self.nb_crossbars) if not const_gmax else 1.) * self.default_gmax.cpu().numpy() * model.gmax_masks[tuple(d)].numpy()
         }
-        # gmax = model.set_active_subnet(arch, skip_adaptation=True)
-        # arch['gmax'] = gmax
         return arch
 
     def arch_vars(self, const:bool=False) -> dict:

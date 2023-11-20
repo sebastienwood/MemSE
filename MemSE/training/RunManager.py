@@ -122,6 +122,8 @@ class RunManager:
         nb_batchs_power: int = -1,
     ):
         mode = self.mode if mode is None else mode
+        if mode is FORWARD_MODE.MONTECARLO and nb_batchs_power == 0:
+            mode = FORWARD_MODE.MONTECARLO_NOPOWER
         net = net.to(self.device)
         # if not isinstance(net, nn.DataParallel):
         #     net = nn.DataParallel(net)
@@ -152,9 +154,9 @@ class RunManager:
                 end = time.time()
                 if not no_logs and i % self.run_config.print_freq == 0:
                     metrics.display(i + 1)
-                if nb_batchs > 0 and i > nb_batchs:
+                if nb_batchs > 0 and i + 1 >= nb_batchs:
                     break
-                if mode is FORWARD_MODE.MONTECARLO and nb_batchs_power > 0 and i > nb_batchs_power:
+                if mode is FORWARD_MODE.MONTECARLO and nb_batchs_power > 0 and i + 1 >= nb_batchs_power:
                     mode = FORWARD_MODE.MONTECARLO_NOPOWER
         if not no_logs:
             metrics.display_summary()
