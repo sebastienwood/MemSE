@@ -91,8 +91,7 @@ while algorithm.has_next():
     n_gen = algorithm.n_gen
     print(f'Done gen {n_gen} in {exec_time}')
     #print("Best solution found: \nX = %s\nF = %s\nCV = %s" % (res.X, res.F, res.CV))
-    
-    #results = {i: (None, (None, encoder.cat_arch_vars(d, memse.gmax_masks), None)) for i, d in enumerate(res.X)}
+
     pop_dict = {}
     for i, (arch, perf) in enumerate(zip(res.X, res.F)):
         pop_dict[i] = {'arch': encoder.cat_arch_vars(arch, memse.gmax_masks), 'perf': perf}
@@ -108,41 +107,37 @@ while algorithm.has_next():
         f'{save_path}/ga_results_pymoo{"_const" if args.const_gmax else ""}_{"simdirect" if args.simulate else args.predictor}.pth',
     )
 
-comparison = {}
 nb_mults = 0
 with tqdm(
             total=len(results),
             desc="Running evals",
         ) as t:
-    for const, res in results.items():
-        bv, bi = res
-        arch = bi[1]
-        run_manager._loader.assign_active_img_size(int(arch["image_size"]))
-        data_loader = run_manager._loader.build_sub_train_loader(
-            n_images=2000, batch_size=256
-        )
+    for res in results.values():
+        for indiv in res['pop'].values():
+            arch = indiv['arch']
+            train_ld, eval_ld = dataholder.get_image_size(int(arch["image_size"]))
 
-        def gather(arch):
-            out = predictor.predict_acc([arch]).cpu()
-            eff, acc = out[1].item(), out[0].item()
+            def gather(arch):
+                out = predictor.predict_acc([arch]).cpu()
+                eff, acc = out[1].item(), out[0].item()
 
-            memse.set_active_subnet(arch, data_loader)
-            memse.quant(scaled=False)
+                memse.set_active_subnet(arch, train_ld)
+                memse.quant(scaled=False)
 
-            loss, metrics = run_manager.validate(net=memse, no_logs=True)
-            memse.unquant()
-            return {"acc": (acc, metrics.top1.avg), "pow": (eff, metrics.power.avg)}
+                _, metrics = run_manager.validate(net=memse, no_logs=True)
+                memse.unquant()
+                return {"acc": (acc, metrics.top1.avg), "pow": (eff, metrics.power.avg)}
 
-        comparison[const] = gather(arch)
-        if nb_mults > 0:
-            for mult in np.linspace(0.8, 1.0, nb_mults, False):
-                arch = copy.deepcopy(arch)
-                arch["gmax"] = (torch.tensor(arch["gmax"]) * mult).tolist()
-                r = gather(arch)
-                comparison[const].update({mult: r})
+            indiv.update(gather(arch))
+            if nb_mults > 0:
+                for mult in np.linspace(0.8, 1.0, nb_mults, False):
+                    arch = copy.deepcopy(arch)
+                    arch["gmax"] = (torch.tensor(arch["gmax"]) * mult).tolist()
+                    r = gather(arch)
+                    indiv.update({mult: r})
         t.update(1)
 
 torch.save(
-    comparison,
-    f'{save_path}/ga_evals_pymoo{"_const" if args.const_gmax else ""}_{args.predictor}.pth',
+    results,
+    f'{save_path}/ga_evals_pymoo{"_const" if args.const_gmax else ""}_{"simdirect" if args.simulate else args.predictor}.pth',
 )
