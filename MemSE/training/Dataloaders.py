@@ -27,6 +27,7 @@ class Dataloader:
     NORMALIZE = None
 
     def __init__(self, **kwargs) -> None:
+        self.__data = None
         if 'root' in kwargs:
             self.ROOT_PATH = kwargs['root']
         if 'imagesize' in kwargs:
@@ -204,11 +205,13 @@ class ImageNetHF(ImageNet):
     VALID_KWARGS = {'split': 'validation'}
 
     def get_dataset(self, transform, **kwargs):
-        import datasets
-        dataset = datasets.load_dataset(self.DATASET, cache_dir=self.ROOT_PATH, **kwargs)
-        dataset.set_format(type='torch')
-        dataset.set_transform(self.transform_wrapper(transform))
-        return dataset
+        if self.__data is None:      
+            from datasets import load_from_disk
+            self.__data= load_from_disk(f'{self.ROOT_PATH}/imagenet1k.hfdatasets')
+            self.__data.set_format(type='torch')
+        assert 'split' in kwargs
+        d = self.__data[kwargs['split']].with_transform(self.transform_wrapper(transform))
+        return d
 
     @staticmethod
     def transform_wrapper(transform):

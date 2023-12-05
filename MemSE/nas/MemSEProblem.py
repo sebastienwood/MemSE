@@ -6,6 +6,8 @@ from pymoo.algorithms.moo.nsga2 import NSGA2, RankAndCrowdingSurvival, calc_crow
 import math
 import torch
 import numpy as np
+import copy
+import json
 from MemSE.nas import DataloadersHolder
 from MemSE.training import RunManager
 from pymoo.core.evaluator import Evaluator
@@ -169,21 +171,53 @@ class MemSEProblem(Problem):
 
     def evaluate_with_simulation(self, arch_dict):
         out = torch.zeros(len(arch_dict), 2)
+        # TODO groupby same arch for bn finetuning, marginal savings
+        group_ad = {} # arch wo gmax -> idx map
+        for idx, a in enumerate(arch_dict):
+            a_ = copy.deepcopy(a).pop('gmax')
+            a_ = json.dumps(a_)
+            if a_ not in group_ad:
+                group_ad[a_] = []
+            group_ad[a_].append(idx)
+        print('Simulation BN efficiency -> ', len(group_ad)/len(arch_dict))
+        
         with torch.no_grad():
-            for idx, a in enumerate(arch_dict):
-                train_ld, eval_ld = self.dataholder.get_image_size(int(a["image_size"]))
-                self.model.set_active_subnet(a, train_ld) # TODO could save and load with LRU cache per arch
-                self.model.quant(scaled=False)
-                _, metrics = self.run_manager.validate(
-                                    net=self.model,
-                                    data_loader=eval_ld,
-                                    no_logs=True,
-                                    nb_batchs=self.n,
-                                    nb_batchs_power=1
-                                )
-                self.model.unquant()
-                out[idx, 0] = - metrics.top1.avg
-                out[idx, 1] = metrics.power.avg
+            for idxes in group_ad.values():
+                for i, idx in enumerate(idxes):
+                    a = arch_dict[idx]
+                    if i == 0:
+                        train_ld, eval_ld = self.dataholder.get_image_size(int(a["image_size"]))
+                        self.model.set_active_subnet(a, train_ld) # TODO could save and load with LRU cache per arch
+                    else:
+                        self.model._model.quanter.Gmax = [gu for gu in a['gmax'] if gu > 0]
+                        self.model._state = a
+                    self.model.quant(scaled=False)
+                    _, metrics = self.run_manager.validate(
+                                        net=self.model,
+                                        data_loader=eval_ld,
+                                        no_logs=True,
+                                        nb_batchs=self.n,
+                                        nb_batchs_power=1
+                                    )
+                    self.model.unquant()
+                    out[idx, 0] = - metrics.top1.avg
+                    out[idx, 1] = metrics.power.avg
+        
+        # with torch.no_grad():
+        #     for idx, a in enumerate(arch_dict):
+        #         train_ld, eval_ld = self.dataholder.get_image_size(int(a["image_size"]))
+        #         self.model.set_active_subnet(a, train_ld) # TODO could save and load with LRU cache per arch
+        #         self.model.quant(scaled=False)
+        #         _, metrics = self.run_manager.validate(
+        #                             net=self.model,
+        #                             data_loader=eval_ld,
+        #                             no_logs=True,
+        #                             nb_batchs=self.n,
+        #                             nb_batchs_power=1
+        #                         )
+        #         self.model.unquant()
+        #         out[idx, 0] = - metrics.top1.avg
+        #         out[idx, 1] = metrics.power.avg
         return out.cpu().numpy()
             
     def evaluate_with_surrogate(self, arch_dict):
