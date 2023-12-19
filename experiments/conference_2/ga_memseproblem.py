@@ -27,13 +27,25 @@ torch.backends.cudnn.benchmark = True
 device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 save_path = ROOT / "experiments/conference_2/results"
+NB_GEN = 500
 
 parser = ArgumentParser()
 parser.add_argument("--datapath", default=os.environ["DATASET_STORE"])
 parser.add_argument("--const_gmax", action="store_true")
 parser.add_argument("--simulate", action="store_true")
 parser.add_argument("--predictor", default="AccuracyPredictor")
+parser.add_argument("--popsize", default=100, type=int)
+parser.add_argument('--multed', default=0, type=int)
+parser.add_argument('--eval_all', action="store_true")
+parser.add_argument('--unique_gmax', action="store_true")
 args, _ = parser.parse_known_args()
+
+if args.const_gmax: # const precedes every mode
+    str_gmax_type = "_const"
+elif args.unique_gmax:
+    str_gmax_type = "_unique"
+else:
+    str_gmax_type = ""
 
 print("Loading")
 
@@ -67,11 +79,12 @@ problem = MemSEProblem(
     dataholder=dataholder,
     surrogate=predictor,
     const=args.const_gmax,
+    unique_gmax=args.unique_gmax,
     simulate=args.simulate
 )
 
 algorithm = NSGA2AdvanceCriterion(
-    pop_size=100,
+    pop_size=args.popsize,
     sampling=MixedVariableSampling(),
     mating=CausalMixedVariableMating(
         eliminate_duplicates=MixedVariableDuplicateElimination(), repair=RepairGmax()
@@ -83,7 +96,7 @@ algorithm = NSGA2AdvanceCriterion(
 )
 
 results = {}
-algorithm.setup(problem, termination=("n_gen", 500), seed=1, verbose=True)
+algorithm.setup(problem, termination=("n_gen", NB_GEN), seed=1, verbose=True)
 while algorithm.has_next():
     algorithm.next()
     res = algorithm.result()
@@ -104,15 +117,15 @@ while algorithm.has_next():
     }
     torch.save(
         results,
-        f'{save_path}/ga_results_pymoo{"_const" if args.const_gmax else ""}_{"simdirect" if args.simulate else args.predictor}.pth',
+        f'{save_path}/ga_results_pymoo{str_gmax_type}_{f"simdirect{args.popsize}" if args.simulate else args.predictor}.pth',
     )
 
-nb_mults = 0
+to_evaluate = results.values() if args.eval_all else [results[max(results.keys())]]
 with tqdm(
             total=len(results),
             desc="Running evals",
         ) as t:
-    for res in results.values():
+    for res in to_evaluate:
         for indiv in res['pop'].values():
             arch = indiv['arch']
             train_ld, eval_ld = dataholder.get_image_size(int(arch["image_size"]))
@@ -129,8 +142,8 @@ with tqdm(
                 return {"acc": (acc, metrics.top1.avg), "pow": (eff, metrics.power.avg)}
 
             indiv.update(gather(arch))
-            if nb_mults > 0:
-                for mult in np.linspace(0.8, 1.0, nb_mults, False):
+            if args.multed > 0:
+                for mult in [float(x) for x in np.linspace(0.9, 1.1, args.multed) if x != 1]:
                     arch = copy.deepcopy(arch)
                     arch["gmax"] = (torch.tensor(arch["gmax"]) * mult).tolist()
                     r = gather(arch)
@@ -139,5 +152,5 @@ with tqdm(
 
 torch.save(
     results,
-    f'{save_path}/ga_evals_pymoo{"_const" if args.const_gmax else ""}_{"simdirect" if args.simulate else args.predictor}.pth',
+    f'{save_path}/ga_evals_pymoo{str_gmax_type}_{f"simdirect{args.popsize}" if args.simulate else args.predictor}.pth',
 )

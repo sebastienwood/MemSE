@@ -2,7 +2,7 @@
 #SBATCH --gres=gpu:1       # Request GPU "generic resources"
 #SBATCH --cpus-per-task=32  # Cores proportional to GPUs: 6 on Cedar, 10 on Béluga, 16 on Graham.
 #SBATCH --mem=160G       # Memory proportional to GPUs: 32000 Cedar, 47000 Béluga, 64000 Graham. 120
-#SBATCH --time=2-00:00     # DD-HH:MM:SS
+#SBATCH --time=3-01:00     # DD-HH:MM:SS
 #SBATCH --mail-user=sebastien.henwood@polymtl.ca
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=FAIL
@@ -18,14 +18,7 @@ nvidia-smi
 
 ###
 # ENV PREPARATION
-# First method is to create the venv on the spot, ensuring fresh installation: it fails if the compute node is offline and some wheels are not cached
-# Second is to push a cached venv
 ###
-# python3 -m venv $SLURM_TMPDIR/env
-# source $SLURM_TMPDIR/env/bin/activate
-# python -m pip install --no-index --upgrade pip setuptools
-# python -m pip install --no-index -r $SOURCEDIR/requirements.txt # --find-links "$SOURCEDIR"/experiments/paper/.installs/
-
 cp ~/projects/def-franlp/$USER/venv.tar.gz $SLURM_TMPDIR
 tar xzf $SLURM_TMPDIR/venv.tar.gz -C $SLURM_TMPDIR
 source $SLURM_TMPDIR/.venv/bin/activate

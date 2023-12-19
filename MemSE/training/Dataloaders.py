@@ -27,7 +27,6 @@ class Dataloader:
     NORMALIZE = None
 
     def __init__(self, **kwargs) -> None:
-        self.__data = None
         if 'root' in kwargs:
             self.ROOT_PATH = kwargs['root']
         if 'imagesize' in kwargs:
@@ -205,7 +204,7 @@ class ImageNetHF(ImageNet):
     VALID_KWARGS = {'split': 'validation'}
 
     def get_dataset(self, transform, **kwargs):
-        if self.__data is None:      
+        if not hasattr(self, '__data'):      
             from datasets import load_from_disk
             self.__data= load_from_disk(f'{self.ROOT_PATH}/imagenet1k.hfdatasets')
             self.__data.set_format(type='torch')

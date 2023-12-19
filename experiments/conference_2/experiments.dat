@@ -6,6 +6,7 @@ python experiments/conference_2/prototyping.py --image_size 224
 
 python experiments/conference_2/ofa_energy_vs_memse_power.py
 python experiments/conference_2/ofa_early_tests/convergence_analysis.py
+python experiments/conference_2/ofa_early_tests/ofa_overhead.py
 
 python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 128
 python experiments/conference_2/gather_memsedataset.py --range_LHS 1 --nb_batchs 6 --nb_batchs_power 1 --image_size 160
@@ -22,7 +23,14 @@ python experiments/conference_2/ga.py --const_gmax
 python experiments/conference_2/ga.py --predictor SigmoidAccuracyPredictor
 python experiments/conference_2/ga.py --const_gmax --predictor SigmoidAccuracyPredictor
 
-python experiments/conference_2/ga_memseproblem.py
-python experiments/conference_2/ga_memseproblem.py --const_gmax
-python experiments/conference_2/ga_memseproblem.py --predictor SigmoidAccuracyPredictor
-python experiments/conference_2/ga_memseproblem.py --const_gmax --predictor SigmoidAccuracyPredictor
+python experiments/conference_2/ga_memseproblem.py --multed 10 --popsize 1024
+python experiments/conference_2/ga_memseproblem.py --const_gmax --multed 10 --popsize 1024
+python experiments/conference_2/ga_memseproblem.py --predictor SigmoidAccuracyPredictor --multed 10 --popsize 1024
+python experiments/conference_2/ga_memseproblem.py --const_gmax --predictor SigmoidAccuracyPredictor --multed 10 --popsize 1024
+python experiments/conference_2/ga_memseproblem.py --multed 10 --popsize 1024 --unique_gmax
+python experiments/conference_2/ga_memseproblem.py --predictor SigmoidAccuracyPredictor --multed 10 --popsize 1024 --unique_gmax
+
+python experiments/conference_2/ga_eval.py --result_name ga_results_pymoo_unique_AccuracyPredictor.pth --multed 10 
+
+python experiments/conference_2/ga_memseproblem.py --simulate --popsize 1000
+python experiments/conference_2/ga_eval.py --result_name ga_results_pymoo_simdirect1000.pth

@@ -8,7 +8,7 @@ import torch
 import numpy as np
 import copy
 import json
-from MemSE.nas import DataloadersHolder
+from MemSE.nas import DataloadersHolder, ResNetArchEncoder
 from MemSE.training import RunManager
 from pymoo.core.evaluator import Evaluator
 from pymoo.core.individual import Individual
@@ -19,10 +19,21 @@ from pymoo.core.variable import Choice, Real, Integer
 __all__ = ["RepairGmax", "CausalMixedVariableMating", "MemSEProblem", "NSGA2AdvanceCriterion", "RankAndCrowdingSurvivalWithRejected", "EvaluatorBatch"]
 
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
+
+
 class RepairGmax(Repair):
     def _do(self, problem, arch_dict, **kwargs):
         # Handle const. case
-        if problem.const:
+        if problem.const or problem.unique_gmax:
             return arch_dict
         
         for a in arch_dict:
@@ -90,7 +101,7 @@ class CausalMixedVariableMating(MixedVariableMating):
 
             _off = crossover(_problem, _parents, **kwargs)
             
-            if 'gmax' in list_of_vars[0]: # treating the vector gmax if it exists
+            if 'gmax' in list_of_vars[0] and not problem.unique_gmax: # treating the vector gmax if it exists
                 for cple_id, couple in enumerate(_parents):
                     par = pop[cple_id]
                     m1 = problem.model.gmax_masks[tuple(problem.arch_encoder.cat_d_vars(par[0].X))].numpy().astype(bool)
@@ -117,14 +128,16 @@ class CausalMixedVariableMating(MixedVariableMating):
 class MemSEProblem(Problem):
     def __init__(self,
                  model,
-                 arch_encoder,
+                 arch_encoder: ResNetArchEncoder,
                  batch_picker,
                  run_manager: RunManager = None,
                  dataholder: DataloadersHolder=None,
                  surrogate=None,
                  simulate=False,
                  const: bool = False,
-                 constrained: float = 0.0):
+                 constrained: float = 0.0,
+                 delta_schedule: float = 0.95,
+                 unique_gmax: bool = False):
         if constrained > 0:
             objs = {
                 'n_obj': 1,
@@ -132,18 +145,20 @@ class MemSEProblem(Problem):
             }
         else:
             objs = {'n_obj': 2}
-        super().__init__(vars=arch_encoder.arch_vars(const), **objs)
+        super().__init__(vars=arch_encoder.arch_vars(const=const, unique_gmax=unique_gmax), **objs)
         self.constrained = constrained
         self.model = model
         self.arch_encoder = arch_encoder
         self.surrogate = surrogate
         self.const = const
+        self.unique_gmax = unique_gmax
         self.batch_picker = batch_picker
         self.dataholder = dataholder
         self.run_manager = run_manager
         self.simulate = simulate
+        self.delta_schedule = delta_schedule
         self.set_n()
-        if const:
+        if const or unique_gmax:
             assert arch_encoder.default_gmax is not None
 
     def _evaluate(self, arch_dict, out, *args, **kwargs):
@@ -162,20 +177,20 @@ class MemSEProblem(Problem):
         if not hasattr(self, 'delta'):
             self.delta = 5.0
         else:
-            self.delta *= 0.9
+            self.delta *= self.delta_schedule
         self.n = self.batch_picker.get_pareto_interp(self.delta)
         
         if not hasattr(self, 'pop_size_init') and pop_size is not None:
             self.pop_size_init = pop_size
-        return pop_size
+        return pop_size # TODO reduce the size dynamically
 
     def evaluate_with_simulation(self, arch_dict):
         out = torch.zeros(len(arch_dict), 2)
-        # TODO groupby same arch for bn finetuning, marginal savings
         group_ad = {} # arch wo gmax -> idx map
         for idx, a in enumerate(arch_dict):
-            a_ = copy.deepcopy(a).pop('gmax')
-            a_ = json.dumps(a_)
+            a_ = copy.deepcopy(a)
+            a_.pop('gmax')
+            a_ = json.dumps(a_, cls=NpEncoder)
             if a_ not in group_ad:
                 group_ad[a_] = []
             group_ad[a_].append(idx)

@@ -18,6 +18,8 @@ parser = ArgumentParser()
 parser.add_argument('--datapath', default=os.environ['DATASET_STORE'])
 parser.add_argument('--result_name', type=str)
 parser.add_argument('--predictor', default='AccuracyPredictor')
+parser.add_argument('--multed', default=0, type=int)
+parser.add_argument('--eval_all', action="store_true")
 args = parser.parse_args()
 assert 'results' in args.result_name
 
@@ -41,12 +43,13 @@ predictor.eval()
 
 results = torch.load(f'{save_path}/{args.result_name}')
 
-nb_mults = 0
+to_evaluate = results.values() if args.eval_all else [results[max(results.keys())]]
+total_to_evaluate = sum([len(x["pop"]) for x in to_evaluate])
 with tqdm(
-            total=len(results),
+            total=total_to_evaluate,
             desc="Running evals",
         ) as t:
-    for res in results.values():
+    for res in to_evaluate:
         for indiv in res['pop'].values():
             arch = indiv['arch']
             train_ld, eval_ld = dataholder.get_image_size(int(arch["image_size"]))
@@ -63,13 +66,13 @@ with tqdm(
                 return {"acc": (acc, metrics.top1.avg), "pow": (eff, metrics.power.avg)}
 
             indiv.update(gather(arch))
-            if nb_mults > 0:
-                for mult in np.linspace(0.8, 1.0, nb_mults, False):
+            if args.multed > 0:
+                for mult in [float(x) for x in np.linspace(0.9, 1.1, args.multed) if x != 1]:
                     arch = copy.deepcopy(arch)
                     arch["gmax"] = (torch.tensor(arch["gmax"]) * mult).tolist()
                     r = gather(arch)
                     indiv.update({mult: r})
-        t.update(1)
+            t.update(1)
 
 torch.save(
     results,
