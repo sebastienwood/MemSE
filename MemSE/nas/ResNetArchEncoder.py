@@ -211,7 +211,7 @@ class ResNetArchEncoder:
         }
         return arch
 
-    def arch_vars(self, const:bool=False, unique_gmax:bool=False) -> dict:
+    def arch_vars(self, const:bool=False) -> dict:
         from pymoo.core.variable import Real, Choice
         arch_vars = {
             "d_0": Choice(options=[0, 2]),
@@ -225,11 +225,11 @@ class ResNetArchEncoder:
             arch_vars[f"w_{i}"] = Choice(options=list(range(len(self.width_mult_list))))
         if not const:
             d_gmax = self.default_gmax.cpu()
-            if unique_gmax:
-                arch_vars[f"gmax"] = Real(bounds=(0.5, 1.5))
-            else:
-                for i in range(self.nb_crossbars):
-                    arch_vars[f"gmax_{i}"] = Real(bounds=(0.5 * d_gmax[i].item(), 1.5 * d_gmax[i].item()))
+            # if unique_gmax:
+            #     arch_vars[f"gmax"] = Real(bounds=(0.5, 1.5))
+            # else:
+            for i in range(self.nb_crossbars):
+                arch_vars[f"gmax_{i}"] = Real(bounds=(0.5 * d_gmax[i].item(), 1.5 * d_gmax[i].item()))
         return arch_vars
     
     def cat_d_vars(self, arch_vars: dict) -> list:
@@ -254,8 +254,8 @@ class ResNetArchEncoder:
             gmax = np.zeros_like(self.default_gmax.cpu().numpy())
             for i in range(self.nb_crossbars):
                 gmax[i] = arch_vars[f"gmax_{i}"]
-        elif "gmax" in arch_vars: # unique gmax
-            gmax = np.copy(self.default_gmax.cpu().numpy()) * arch_vars['gmax'] * gmax_masks[tuple(arch_vars_res["d"])].numpy()
+        # elif "gmax" in arch_vars: # unique gmax
+        #     gmax = np.copy(self.default_gmax.cpu().numpy()) * arch_vars['gmax'] * gmax_masks[tuple(arch_vars_res["d"])].numpy()
         else: # no gmax (const)
             assert gmax_masks is not None
             gmax = np.copy(self.default_gmax) * gmax_masks[tuple(arch_vars_res["d"])].numpy()

@@ -33,7 +33,7 @@ class NpEncoder(json.JSONEncoder):
 class RepairGmax(Repair):
     def _do(self, problem, arch_dict, **kwargs):
         # Handle const. case
-        if problem.const or problem.unique_gmax:
+        if problem.const: # or problem.unique_gmax:
             return arch_dict
         
         for a in arch_dict:
@@ -101,7 +101,7 @@ class CausalMixedVariableMating(MixedVariableMating):
 
             _off = crossover(_problem, _parents, **kwargs)
             
-            if 'gmax' in list_of_vars[0] and not problem.unique_gmax: # treating the vector gmax if it exists
+            if 'gmax' in list_of_vars[0]: #and not problem.unique_gmax: # treating the vector gmax if it exists
                 for cple_id, couple in enumerate(_parents):
                     par = pop[cple_id]
                     m1 = problem.model.gmax_masks[tuple(problem.arch_encoder.cat_d_vars(par[0].X))].numpy().astype(bool)
@@ -137,7 +137,8 @@ class MemSEProblem(Problem):
                  const: bool = False,
                  constrained: float = 0.0,
                  delta_schedule: float = 0.95,
-                 unique_gmax: bool = False):
+                 #unique_gmax: bool = False
+                ):
         if constrained > 0:
             objs = {
                 'n_obj': 1,
@@ -145,20 +146,20 @@ class MemSEProblem(Problem):
             }
         else:
             objs = {'n_obj': 2}
-        super().__init__(vars=arch_encoder.arch_vars(const=const, unique_gmax=unique_gmax), **objs)
+        super().__init__(vars=arch_encoder.arch_vars(const=const), **objs)#, unique_gmax=unique_gmax), **objs)
         self.constrained = constrained
         self.model = model
         self.arch_encoder = arch_encoder
         self.surrogate = surrogate
         self.const = const
-        self.unique_gmax = unique_gmax
+        #self.unique_gmax = unique_gmax
         self.batch_picker = batch_picker
         self.dataholder = dataholder
         self.run_manager = run_manager
         self.simulate = simulate
         self.delta_schedule = delta_schedule
         self.set_n()
-        if const or unique_gmax:
+        if const: #or unique_gmax:
             assert arch_encoder.default_gmax is not None
 
     def _evaluate(self, arch_dict, out, *args, **kwargs):

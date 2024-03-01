@@ -37,13 +37,13 @@ parser.add_argument("--predictor", default="AccuracyPredictor")
 parser.add_argument("--popsize", default=100, type=int)
 parser.add_argument('--multed', default=0, type=int)
 parser.add_argument('--eval_all', action="store_true")
-parser.add_argument('--unique_gmax', action="store_true")
+#parser.add_argument('--unique_gmax', action="store_true")
 args, _ = parser.parse_known_args()
 
 if args.const_gmax: # const precedes every mode
     str_gmax_type = "_const"
-elif args.unique_gmax:
-    str_gmax_type = "_unique"
+# elif args.unique_gmax:
+#     str_gmax_type = "_unique"
 else:
     str_gmax_type = ""
 
@@ -79,7 +79,7 @@ problem = MemSEProblem(
     dataholder=dataholder,
     surrogate=predictor,
     const=args.const_gmax,
-    unique_gmax=args.unique_gmax,
+    #unique_gmax=args.unique_gmax,
     simulate=args.simulate
 )
 
@@ -121,8 +121,9 @@ while algorithm.has_next():
     )
 
 to_evaluate = results.values() if args.eval_all else [results[max(results.keys())]]
+total_to_evaluate = sum([len(x["pop"]) for x in to_evaluate])
 with tqdm(
-            total=len(results),
+            total=total_to_evaluate,
             desc="Running evals",
         ) as t:
     for res in to_evaluate:
@@ -141,14 +142,20 @@ with tqdm(
                 memse.unquant()
                 return {"acc": (acc, metrics.top1.avg), "pow": (eff, metrics.power.avg)}
 
-            indiv.update(gather(arch))
+            r = gather(arch) 
+            indiv.update(r)
             if args.multed > 0:
-                for mult in [float(x) for x in np.linspace(0.9, 1.1, args.multed) if x != 1]:
+                multed = {}
+                multed[1.] = r
+                for mult in [float(x) for x in np.linspace(0.9, 1.1, args.multed)]:
                     arch = copy.deepcopy(arch)
                     arch["gmax"] = (torch.tensor(arch["gmax"]) * mult).tolist()
                     r = gather(arch)
-                    indiv.update({mult: r})
-        t.update(1)
+                    multed.update({mult: r})
+                indiv['multed'] = multed
+            print(indiv)
+            t.update(1)
+print(res['pop'].values())
 
 torch.save(
     results,
